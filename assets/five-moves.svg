@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 250" width="900" height="250" role="img" aria-label="The five scaling moves: cache, precompute, replicate, shard, queue">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .h{font-size:14.5px;font-weight:700}
+    .b{font-size:11px;fill:#475569}
+    .tag{font-size:10px;font-weight:700;fill:#ffffff}
+  </style>
+  <rect width="900" height="250" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="34">The five moves — every scaling answer is a combination of these</text>
+  <text class="sub" x="24" y="54">Identify whether it is a READ or a WRITE problem, then pick your move and name its cost.</text>
+
+  <!-- CACHE -->
+  <rect x="24" y="74" width="164" height="130" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <rect x="24" y="74" width="164" height="26" rx="10" fill="#2563eb"/>
+  <rect x="24" y="90" width="164" height="10" fill="#2563eb"/>
+  <text class="tag" x="106" y="92" text-anchor="middle">READ</text>
+  <text class="h" x="106" y="126" text-anchor="middle" fill="#1e3a8a">CACHE it</text>
+  <text class="b" x="106" y="148" text-anchor="middle">Same answer for</text>
+  <text class="b" x="106" y="162" text-anchor="middle">many users</text>
+  <text class="b" x="106" y="184" text-anchor="middle" font-style="italic" fill="#64748b">cost: staleness</text>
+
+  <!-- PRECOMPUTE -->
+  <rect x="200" y="74" width="164" height="130" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <rect x="200" y="74" width="164" height="26" rx="10" fill="#2563eb"/>
+  <rect x="200" y="90" width="164" height="10" fill="#2563eb"/>
+  <text class="tag" x="282" y="92" text-anchor="middle">READ</text>
+  <text class="h" x="282" y="126" text-anchor="middle" fill="#1e3a8a">PRECOMPUTE it</text>
+  <text class="b" x="282" y="148" text-anchor="middle">Expensive per-user</text>
+  <text class="b" x="282" y="162" text-anchor="middle">result, read often</text>
+  <text class="b" x="282" y="184" text-anchor="middle" font-style="italic" fill="#64748b">cost: write amplification</text>
+
+  <!-- REPLICATE -->
+  <rect x="376" y="74" width="164" height="130" rx="10" fill="#f0fdf4" stroke="#86efac"/>
+  <rect x="376" y="74" width="164" height="26" rx="10" fill="#16a34a"/>
+  <rect x="376" y="90" width="164" height="10" fill="#16a34a"/>
+  <text class="tag" x="458" y="92" text-anchor="middle">READ + HA</text>
+  <text class="h" x="458" y="126" text-anchor="middle" fill="#14532d">REPLICATE it</text>
+  <text class="b" x="458" y="148" text-anchor="middle">Read volume or</text>
+  <text class="b" x="458" y="162" text-anchor="middle">availability target</text>
+  <text class="b" x="458" y="184" text-anchor="middle" font-style="italic" fill="#64748b">cost: replication lag</text>
+
+  <!-- SHARD -->
+  <rect x="552" y="74" width="164" height="130" rx="10" fill="#fff7ed" stroke="#fdba74"/>
+  <rect x="552" y="74" width="164" height="26" rx="10" fill="#ea580c"/>
+  <rect x="552" y="90" width="164" height="10" fill="#ea580c"/>
+  <text class="tag" x="634" y="92" text-anchor="middle">WRITE</text>
+  <text class="h" x="634" y="126" text-anchor="middle" fill="#7c2d12">SHARD it</text>
+  <text class="b" x="634" y="148" text-anchor="middle">Exceeds one node's</text>
+  <text class="b" x="634" y="162" text-anchor="middle">writes or storage</text>
+  <text class="b" x="634" y="184" text-anchor="middle" font-style="italic" fill="#64748b">cost: cross-shard queries</text>
+
+  <!-- QUEUE -->
+  <rect x="728" y="74" width="148" height="130" rx="10" fill="#fff7ed" stroke="#fdba74"/>
+  <rect x="728" y="74" width="148" height="26" rx="10" fill="#ea580c"/>
+  <rect x="728" y="90" width="148" height="10" fill="#ea580c"/>
+  <text class="tag" x="802" y="92" text-anchor="middle">WRITE</text>
+  <text class="h" x="802" y="126" text-anchor="middle" fill="#7c2d12">QUEUE it</text>
+  <text class="b" x="802" y="148" text-anchor="middle">Not needed for</text>
+  <text class="b" x="802" y="162" text-anchor="middle">the response</text>
+  <text class="b" x="802" y="184" text-anchor="middle" font-style="italic" fill="#64748b">cost: eventual, duplicates</text>
+
+  <text class="sub" x="450" y="232" text-anchor="middle">Everything else — CDNs, CQRS, fan-out, materialized views, read replicas — is one of these five wearing a costume.</text>
+</svg>

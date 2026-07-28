@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" role="img" aria-label="Timing comparison of short polling, long polling, server sent events and websockets">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .hd{font-size:13px;font-weight:700;fill:#0f172a}
+    .b{font-size:11px;fill:#475569}
+    .lg{font-size:10px;fill:#64748b}
+    .ev{font-size:10px;font-weight:700;fill:#b45309}
+  </style>
+  <rect width="900" height="400" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Real-time delivery — the same 12 seconds, four protocols</text>
+  <text class="sub" x="24" y="52">Vertical amber lines are moments when the server has new data. Notice how much of the client's traffic is wasted.</text>
+
+  <!-- event lines -->
+  <g stroke="#f59e0b" stroke-dasharray="4 3" stroke-width="1.5">
+    <line x1="290" y1="76" x2="290" y2="360"/>
+    <line x1="470" y1="76" x2="470" y2="360"/>
+    <line x1="700" y1="76" x2="700" y2="360"/>
+  </g>
+  <text class="ev" x="290" y="72" text-anchor="middle">data ready</text>
+  <text class="ev" x="470" y="72" text-anchor="middle">data ready</text>
+  <text class="ev" x="700" y="72" text-anchor="middle">data ready</text>
+
+  <!-- SHORT POLLING -->
+  <text class="hd" x="24" y="106">Short polling</text>
+  <text class="b" x="24" y="122">GET every 2 s</text>
+  <line x1="180" y1="112" x2="860" y2="112" stroke="#e2e8f0"/>
+  <g fill="#94a3b8">
+    <rect x="180" y="104" width="26" height="16" rx="3"/><rect x="290" y="104" width="26" height="16" rx="3"/>
+    <rect x="400" y="104" width="26" height="16" rx="3"/><rect x="510" y="104" width="26" height="16" rx="3"/>
+    <rect x="620" y="104" width="26" height="16" rx="3"/><rect x="730" y="104" width="26" height="16" rx="3"/>
+    <rect x="840" y="104" width="20" height="16" rx="3"/>
+  </g>
+  <rect x="290" y="104" width="26" height="16" rx="3" fill="#16a34a"/>
+  <rect x="510" y="104" width="26" height="16" rx="3" fill="#16a34a"/>
+  <rect x="730" y="104" width="26" height="16" rx="3" fill="#16a34a"/>
+  <text class="lg" x="864" y="117">7 requests, 4 empty · up to 2 s stale</text>
+
+  <!-- LONG POLLING -->
+  <text class="hd" x="24" y="166">Long polling</text>
+  <text class="b" x="24" y="182">server holds it open</text>
+  <line x1="180" y1="172" x2="860" y2="172" stroke="#e2e8f0"/>
+  <rect x="180" y="164" width="110" height="16" rx="3" fill="#cbd5e1"/>
+  <rect x="290" y="164" width="10" height="16" rx="3" fill="#16a34a"/>
+  <rect x="304" y="164" width="166" height="16" rx="3" fill="#cbd5e1"/>
+  <rect x="470" y="164" width="10" height="16" rx="3" fill="#16a34a"/>
+  <rect x="484" y="164" width="216" height="16" rx="3" fill="#cbd5e1"/>
+  <rect x="700" y="164" width="10" height="16" rx="3" fill="#16a34a"/>
+  <rect x="714" y="164" width="146" height="16" rx="3" fill="#cbd5e1"/>
+  <text class="lg" x="864" y="177">3 requests, 0 empty · near-instant · a held thread/conn per client</text>
+
+  <!-- SSE -->
+  <text class="hd" x="24" y="226">SSE</text>
+  <text class="b" x="24" y="242">one stream, server → client</text>
+  <line x1="180" y1="232" x2="860" y2="232" stroke="#e2e8f0"/>
+  <rect x="180" y="224" width="680" height="16" rx="3" fill="#bfdbfe"/>
+  <g fill="#2563eb">
+    <rect x="290" y="222" width="8" height="20" rx="2"/><rect x="470" y="222" width="8" height="20" rx="2"/>
+    <rect x="700" y="222" width="8" height="20" rx="2"/>
+  </g>
+  <text class="lg" x="864" y="237">1 connection · auto-reconnect + Last-Event-ID · plain HTTP · one-way only</text>
+
+  <!-- WEBSOCKET -->
+  <text class="hd" x="24" y="286">WebSocket</text>
+  <text class="b" x="24" y="302">full duplex</text>
+  <line x1="180" y1="292" x2="860" y2="292" stroke="#e2e8f0"/>
+  <rect x="180" y="284" width="680" height="16" rx="3" fill="#ddd6fe"/>
+  <g fill="#7c3aed">
+    <rect x="290" y="282" width="8" height="20" rx="2"/><rect x="470" y="282" width="8" height="20" rx="2"/>
+    <rect x="700" y="282" width="8" height="20" rx="2"/>
+  </g>
+  <g fill="#a78bfa">
+    <rect x="360" y="282" width="8" height="20" rx="2"/><rect x="560" y="282" width="8" height="20" rx="2"/>
+    <rect x="790" y="282" width="8" height="20" rx="2"/>
+  </g>
+  <text class="lg" x="864" y="297">1 connection · sub-100 ms both directions · you now operate a stateful tier</text>
+
+  <!-- time axis -->
+  <line x1="180" y1="326" x2="860" y2="326" stroke="#cbd5e1"/>
+  <g class="lg" text-anchor="middle" fill="#94a3b8">
+    <text x="180" y="342">0 s</text><text x="350" y="342">3 s</text><text x="520" y="342">6 s</text>
+    <text x="690" y="342">9 s</text><text x="855" y="342">12 s</text>
+  </g>
+
+  <rect x="24" y="356" width="852" height="34" rx="6" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text class="b" x="40" y="370" font-size="11.5">Choose by freshness need, not fashion: <tspan font-weight="700">minutes → polling</tspan> · <tspan font-weight="700">seconds, one-way → SSE</tspan> · <tspan font-weight="700">sub-second, two-way → WebSocket</tspan>.</text>
+  <text class="b" x="40" y="386" font-size="11.5">Above ~100 K concurrent sockets the real design problem stops being the protocol and becomes the connection registry and reconnect storms.</text>
+</svg>

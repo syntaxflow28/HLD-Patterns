@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" width="900" height="300" role="img" aria-label="The consistency spectrum from linearizable to eventual">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .m{font-size:12.5px;font-weight:700;fill:#ffffff}
+    .g{font-size:11px;fill:#334155}
+    .ax{font-size:11.5px;font-weight:700;fill:#475569}
+    .ex{font-size:10.5px;fill:#64748b}
+  </style>
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7c3aed"/><stop offset="25%" stop-color="#2563eb"/>
+      <stop offset="55%" stop-color="#0891b2"/><stop offset="80%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#84cc16"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="300" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">The consistency spectrum — it is not binary</text>
+  <text class="sub" x="24" y="52">Most systems need different guarantees for different data. Naming the exact model you need is a senior signal.</text>
+
+  <rect x="40" y="80" width="820" height="44" rx="8" fill="url(#grad)"/>
+  <g class="m" text-anchor="middle">
+    <text x="118" y="107">Linearizable</text>
+    <text x="272" y="107">Sequential</text>
+    <text x="418" y="107">Causal</text>
+    <text x="566" y="107">Read-your-writes</text>
+    <text x="702" y="107">Monotonic reads</text>
+    <text x="820" y="107">Eventual</text>
+  </g>
+
+  <text class="ax" x="40" y="146">◀ stronger · slower · more coordination</text>
+  <text class="ax" x="860" y="146" text-anchor="end">weaker · faster · cheaper ▶</text>
+
+  <g class="g">
+    <line x1="118" y1="158" x2="118" y2="172" stroke="#94a3b8"/>
+    <text x="118" y="188" text-anchor="middle" font-weight="700">Every read sees the</text>
+    <text x="118" y="203" text-anchor="middle">latest committed write,</text>
+    <text x="118" y="218" text-anchor="middle">globally ordered</text>
+    <text class="ex" x="118" y="238" text-anchor="middle">etcd, Spanner, single-primary</text>
+    <text class="ex" x="118" y="252" text-anchor="middle">Cost: consensus per op</text>
+
+    <line x1="418" y1="158" x2="418" y2="172" stroke="#94a3b8"/>
+    <text x="418" y="188" text-anchor="middle" font-weight="700">Causally related ops</text>
+    <text x="418" y="203" text-anchor="middle">are seen in order —</text>
+    <text x="418" y="218" text-anchor="middle">no reply before question</text>
+    <text class="ex" x="418" y="238" text-anchor="middle">COPS, MongoDB sessions</text>
+    <text class="ex" x="418" y="252" text-anchor="middle">Cost: dependency tracking</text>
+
+    <line x1="566" y1="158" x2="566" y2="172" stroke="#94a3b8"/>
+    <text x="566" y="188" text-anchor="middle" font-weight="700">You see your own</text>
+    <text x="566" y="203" text-anchor="middle">writes; others may lag</text>
+    <text class="ex" x="566" y="223" text-anchor="middle">Route to primary for N sec</text>
+    <text class="ex" x="566" y="237" text-anchor="middle">after a write, or pass a</text>
+    <text class="ex" x="566" y="251" text-anchor="middle">version token with the read</text>
+
+    <line x1="820" y1="158" x2="820" y2="172" stroke="#94a3b8"/>
+    <text x="820" y="188" text-anchor="middle" font-weight="700">Converges if</text>
+    <text x="820" y="203" text-anchor="middle">writes stop</text>
+    <text class="ex" x="820" y="223" text-anchor="middle">Cassandra, DNS, CDN</text>
+    <text class="ex" x="820" y="237" text-anchor="middle">Needs a conflict rule:</text>
+    <text class="ex" x="820" y="251" text-anchor="middle">LWW, vector clocks, CRDT</text>
+  </g>
+
+  <rect x="40" y="264" width="820" height="26" rx="6" fill="#fef3c7" stroke="#fcd34d"/>
+  <text class="g" x="54" y="282">The cheap trick most candidates miss: you usually only need strong consistency <tspan font-weight="700">for the person who wrote the data</tspan>. Read-your-writes for the author + eventual for everyone else costs almost nothing.</text>
+</svg>

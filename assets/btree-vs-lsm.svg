@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" width="900" height="420" role="img" aria-label="B-Tree versus LSM Tree storage engines">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .hd{font-size:14px;font-weight:700}
+    .n{font-size:10.5px;font-weight:700;fill:#ffffff}
+    .b{font-size:11.5px;fill:#334155}
+    .lb{font-size:11px;font-weight:600;fill:#475569}
+    .sm{font-size:10.5px;fill:#64748b}
+  </style>
+  <rect width="900" height="420" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">B-Tree vs LSM Tree — the storage engine decides your write ceiling</text>
+  <text class="sub" x="24" y="52">“Why Cassandra for writes and Postgres for reads?” The honest answer is this diagram, not marketing.</text>
+
+  <!-- B-TREE -->
+  <rect x="24" y="72" width="418" height="256" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="hd" x="44" y="98" fill="#1e3a8a">B-Tree — update in place</text>
+  <text class="sm" x="44" y="114">PostgreSQL, MySQL/InnoDB, Oracle, SQL Server</text>
+
+  <rect x="186" y="128" width="94" height="26" rx="4" fill="#2563eb"/>
+  <text class="n" x="233" y="145" text-anchor="middle">root  [50 | 100]</text>
+  <line x1="205" y1="154" x2="120" y2="180" stroke="#2563eb"/>
+  <line x1="233" y1="154" x2="233" y2="180" stroke="#2563eb"/>
+  <line x1="261" y1="154" x2="346" y2="180" stroke="#2563eb"/>
+
+  <rect x="72" y="180" width="94" height="24" rx="4" fill="#3b82f6"/>
+  <text class="n" x="119" y="196" text-anchor="middle">[10 | 25 | 40]</text>
+  <rect x="186" y="180" width="94" height="24" rx="4" fill="#3b82f6"/>
+  <text class="n" x="233" y="196" text-anchor="middle">[60 | 75 | 90]</text>
+  <rect x="300" y="180" width="94" height="24" rx="4" fill="#3b82f6"/>
+  <text class="n" x="347" y="196" text-anchor="middle">[110 | 140]</text>
+
+  <g fill="#93c5fd">
+    <rect x="52" y="226" width="52" height="20" rx="3"/><rect x="110" y="226" width="52" height="20" rx="3"/>
+    <rect x="176" y="226" width="52" height="20" rx="3"/><rect x="234" y="226" width="52" height="20" rx="3"/>
+    <rect x="300" y="226" width="52" height="20" rx="3"/><rect x="358" y="226" width="52" height="20" rx="3"/>
+  </g>
+  <text class="lb" x="233" y="262" text-anchor="middle">leaf pages on disk — fixed location per key</text>
+
+  <rect x="44" y="272" width="378" height="46" rx="6" fill="#dbeafe"/>
+  <text class="b" x="58" y="290">WRITE: seek to the page, modify it, write it back → <tspan font-weight="700">random I/O</tspan></text>
+  <text class="b" x="58" y="308">READ: O(log n) pointer hops, one page fetch → <tspan font-weight="700">predictable, low read amplification</tspan></text>
+
+  <!-- LSM -->
+  <rect x="458" y="72" width="418" height="256" rx="10" fill="#f0fdf4" stroke="#86efac"/>
+  <text class="hd" x="478" y="98" fill="#14532d">LSM Tree — append only, compact later</text>
+  <text class="sm" x="478" y="114">Cassandra, ScyllaDB, RocksDB, LevelDB, HBase</text>
+
+  <rect x="478" y="128" width="128" height="34" rx="5" fill="#16a34a"/>
+  <text class="n" x="542" y="149" text-anchor="middle">MemTable (RAM)</text>
+  <rect x="620" y="128" width="110" height="34" rx="5" fill="#65a30d"/>
+  <text class="n" x="675" y="149" text-anchor="middle">WAL (durability)</text>
+  <line x1="542" y1="162" x2="542" y2="182" stroke="#16a34a" stroke-width="2" marker-end="url(#l1)"/>
+  <defs><marker id="l1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#16a34a"/></marker></defs>
+  <text class="sm" x="556" y="177">flush when full</text>
+
+  <rect x="478" y="186" width="76" height="22" rx="3" fill="#22c55e"/><text class="n" x="516" y="201" text-anchor="middle">SST L0</text>
+  <rect x="562" y="186" width="76" height="22" rx="3" fill="#22c55e"/><text class="n" x="600" y="201" text-anchor="middle">SST L0</text>
+  <rect x="646" y="186" width="76" height="22" rx="3" fill="#22c55e"/><text class="n" x="684" y="201" text-anchor="middle">SST L0</text>
+  <rect x="730" y="186" width="128" height="22" rx="3" fill="#bbf7d0"/><text class="n" x="794" y="201" text-anchor="middle" fill="#14532d">Bloom filters</text>
+
+  <line x1="600" y1="208" x2="600" y2="226" stroke="#16a34a" stroke-width="2" marker-end="url(#l1)"/>
+  <text class="sm" x="614" y="222">compaction (background merge + drop tombstones)</text>
+  <rect x="478" y="230" width="180" height="22" rx="3" fill="#15803d"/><text class="n" x="568" y="245" text-anchor="middle">SST L1 (sorted, merged)</text>
+  <rect x="666" y="230" width="192" height="22" rx="3" fill="#166534"/><text class="n" x="762" y="245" text-anchor="middle">SST L2 (larger, older)</text>
+
+  <rect x="478" y="266" width="378" height="52" rx="6" fill="#dcfce7"/>
+  <text class="b" x="492" y="284">WRITE: append to memtable + WAL → <tspan font-weight="700">sequential I/O, very high throughput</tspan></text>
+  <text class="b" x="492" y="302">READ: may check memtable + several SSTs → <tspan font-weight="700">higher read amplification</tspan></text>
+  <text class="sm" x="492" y="316">Bloom filters make “key definitely not in this SST” an O(1) skip — that is why they are everywhere in LSM engines.</text>
+
+  <!-- comparison strip -->
+  <rect x="24" y="342" width="852" height="62" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
+  <g class="b">
+    <text x="40" y="362" font-weight="700">Write amplification</text><text x="200" y="362">B-Tree: lower, but random</text><text x="430" y="362">LSM: higher (compaction), but sequential → wins on throughput</text>
+    <text x="40" y="380" font-weight="700">Read amplification</text><text x="200" y="380">B-Tree: low, predictable</text><text x="430" y="380">LSM: higher; mitigated by Bloom filters and compaction</text>
+    <text x="40" y="398" font-weight="700">Watch out for</text><text x="200" y="398">B-Tree: page fragmentation</text><text x="430" y="398">LSM: compaction stalls, tombstone build-up, read latency spikes during compaction</text>
+  </g>
+</svg>

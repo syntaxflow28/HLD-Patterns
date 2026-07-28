@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" width="900" height="360" role="img" aria-label="Universal Scalability Law: why doubling nodes does not double throughput">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .ax{font-size:11px;fill:#94a3b8}
+    .lg{font-size:12px;font-weight:600}
+    .note{font-size:11.5px;fill:#334155}
+  </style>
+  <rect width="900" height="360" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Universal Scalability Law — 2× the machines is never 2× the throughput</text>
+  <text class="sub" x="24" y="52">Contention (serialized sections) flattens the curve. Coherence (nodes agreeing) bends it back down.</text>
+
+  <!-- axes -->
+  <line x1="70" y1="290" x2="620" y2="290" stroke="#cbd5e1"/>
+  <line x1="70" y1="80" x2="70" y2="290" stroke="#cbd5e1"/>
+  <g class="ax" text-anchor="middle">
+    <text x="70" y="310">1</text><text x="139" y="310">4</text><text x="208" y="310">8</text>
+    <text x="277" y="310">16</text><text x="346" y="310">24</text><text x="415" y="310">32</text>
+    <text x="484" y="310">48</text><text x="553" y="310">64</text>
+  </g>
+  <text class="ax" x="345" y="330" text-anchor="middle">nodes →</text>
+  <text class="ax" x="62" y="86" text-anchor="end">throughput</text>
+
+  <g stroke="#eef2f7">
+    <line x1="70" y1="240" x2="620" y2="240"/><line x1="70" y1="190" x2="620" y2="190"/>
+    <line x1="70" y1="140" x2="620" y2="140"/><line x1="70" y1="90" x2="620" y2="90"/>
+  </g>
+
+  <!-- linear ideal -->
+  <line x1="70" y1="285" x2="600" y2="86" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 4"/>
+  <text class="lg" x="606" y="86" fill="#64748b">linear (ideal)</text>
+
+  <!-- Amdahl: flattens -->
+  <path d="M70,285 C170,245 260,214 360,196 C440,182 520,175 600,171" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+  <text class="lg" x="606" y="172" fill="#b45309">contention only</text>
+
+  <!-- USL: peaks then declines -->
+  <path d="M70,285 C150,250 210,224 270,213 C310,206 340,205 365,209 C420,219 480,244 545,268 C570,277 590,283 600,286" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+  <text class="lg" x="606" y="290" fill="#b91c1c">+ coherence (real)</text>
+
+  <!-- peak marker -->
+  <circle cx="360" cy="205" r="5" fill="#dc2626"/>
+  <line x1="360" y1="205" x2="360" y2="290" stroke="#dc2626" stroke-dasharray="3 3"/>
+  <text class="lg" x="360" y="198" text-anchor="middle" fill="#b91c1c">peak — adding nodes now makes it SLOWER</text>
+
+  <!-- right panel -->
+  <rect x="648" y="80" width="228" height="98" rx="8" fill="#fff7ed" stroke="#fdba74"/>
+  <text class="lg" x="662" y="102" fill="#9a3412">Contention (α)</text>
+  <text class="note" x="662" y="122">Locks, a single primary,</text>
+  <text class="note" x="662" y="138">one hot row, a global counter,</text>
+  <text class="note" x="662" y="154">a single-threaded leader.</text>
+  <text class="note" x="662" y="170" font-style="italic">Fix: remove the serial section.</text>
+
+  <rect x="648" y="190" width="228" height="118" rx="8" fill="#fef2f2" stroke="#fca5a5"/>
+  <text class="lg" x="662" y="212" fill="#991b1b">Coherence (β) — quadratic</text>
+  <text class="note" x="662" y="232">Consensus rounds, 2PC,</text>
+  <text class="note" x="662" y="248">cache invalidation broadcasts,</text>
+  <text class="note" x="662" y="264">cross-shard joins, gossip.</text>
+  <text class="note" x="662" y="284" font-style="italic">Fix: SHARD so nodes own</text>
+  <text class="note" x="662" y="300" font-style="italic">disjoint state and never talk.</text>
+
+  <text class="note" x="24" y="350">This is the real argument for partitioning over “just add replicas of shared state” — and for why a 5-node etcd cluster is not faster than a 3-node one.</text>
+</svg>

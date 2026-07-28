@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" width="900" height="340" role="img" aria-label="Quorum reads and writes: why W plus R greater than N guarantees overlap">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .hd{font-size:13px;font-weight:700;fill:#0f172a}
+    .n{font-size:12px;font-weight:700;fill:#ffffff}
+    .b{font-size:11.5px;fill:#334155}
+    .f{font-size:15px;font-weight:700;fill:#0f172a}
+    .ok{font-size:11.5px;font-weight:700;fill:#15803d}
+    .bad{font-size:11.5px;font-weight:700;fill:#b91c1c}
+  </style>
+  <rect width="900" height="340" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Quorum — W + R &gt; N guarantees the read set overlaps the write set</text>
+  <text class="sub" x="24" y="52">If every read touches at least one node that acknowledged the latest write, you cannot miss it. That is the whole idea.</text>
+
+  <text class="f" x="450" y="86" text-anchor="middle">N = 3 &#160;·&#160; W = 2 &#160;·&#160; R = 2 &#160;→&#160; 2 + 2 &gt; 3 ✔</text>
+
+  <!-- write set -->
+  <text class="hd" x="150" y="118" text-anchor="middle">WRITE reaches W = 2</text>
+  <rect x="60" y="130" width="182" height="120" rx="10" fill="#eff6ff" stroke="#93c5fd" stroke-dasharray="5 4"/>
+  <circle cx="106" cy="164" r="24" fill="#2563eb"/><text class="n" x="106" y="169" text-anchor="middle">N1</text>
+  <circle cx="196" cy="164" r="24" fill="#2563eb"/><text class="n" x="196" y="169" text-anchor="middle">N2</text>
+  <circle cx="151" cy="222" r="24" fill="#cbd5e1"/><text class="n" x="151" y="227" text-anchor="middle" fill="#475569">N3</text>
+  <text class="b" x="151" y="266" text-anchor="middle">N1, N2 = v2 &#160;|&#160; N3 = v1 (stale)</text>
+
+  <!-- read set -->
+  <text class="hd" x="450" y="118" text-anchor="middle">READ queries R = 2</text>
+  <rect x="360" y="130" width="182" height="120" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-dasharray="5 4"/>
+  <circle cx="406" cy="164" r="24" fill="#cbd5e1"/><text class="n" x="406" y="169" text-anchor="middle" fill="#475569">N1</text>
+  <circle cx="496" cy="164" r="24" fill="#16a34a"/><text class="n" x="496" y="169" text-anchor="middle">N2</text>
+  <circle cx="451" cy="222" r="24" fill="#16a34a"/><text class="n" x="451" y="227" text-anchor="middle">N3</text>
+  <text class="b" x="451" y="266" text-anchor="middle">reads N2 (v2) and N3 (v1)</text>
+
+  <!-- overlap -->
+  <text class="hd" x="740" y="118" text-anchor="middle">Overlap is guaranteed</text>
+  <rect x="640" y="130" width="200" height="120" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+  <circle cx="700" cy="188" r="42" fill="#2563eb" fill-opacity="0.28" stroke="#2563eb"/>
+  <circle cx="782" cy="188" r="42" fill="#16a34a" fill-opacity="0.28" stroke="#16a34a"/>
+  <text class="n" x="676" y="192" fill="#1e3a8a">W</text>
+  <text class="n" x="806" y="192" fill="#14532d">R</text>
+  <text class="n" x="741" y="185" fill="#92400e">N2</text>
+  <text class="n" x="741" y="200" fill="#92400e" font-size="9">always ≥1</text>
+  <text class="b" x="740" y="266" text-anchor="middle">Client takes the highest version → v2 ✔</text>
+
+  <!-- config table -->
+  <rect x="24" y="284" width="852" height="44" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
+  <g class="b">
+    <text x="40" y="302" font-weight="700">N=3, W=2, R=2</text><text x="150" y="302">strong-ish, survives 1 node down, balanced latency</text><text x="470" y="302" class="ok">the default you should quote</text>
+    <text x="40" y="320" font-weight="700">N=3, W=3, R=1</text><text x="150" y="320">fastest reads, but ANY node down blocks all writes</text>
+    <text x="470" y="320" font-weight="700">N=3, W=1, R=1</text><text x="580" y="320">fastest, W+R ≤ N →</text><text x="700" y="320" class="bad">eventual, may read stale</text>
+  </g>
+</svg>

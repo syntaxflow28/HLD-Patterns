@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" width="900" height="340" role="img" aria-label="Latency distribution showing why p99 matters more than the average">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .ax{font-size:11px;fill:#94a3b8}
+    .pk{font-size:11.5px;font-weight:700}
+    .note{font-size:11.5px;fill:#334155}
+  </style>
+  <rect width="900" height="340" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Why p99, not average</text>
+  <text class="sub" x="24" y="52">The distribution is long-tailed. The mean sits where almost nobody lives, and your best customers live in the tail.</text>
+
+  <!-- axes -->
+  <line x1="70" y1="250" x2="860" y2="250" stroke="#cbd5e1"/>
+  <line x1="70" y1="80" x2="70" y2="250" stroke="#cbd5e1"/>
+  <text class="ax" x="70" y="270">0</text>
+  <text class="ax" x="860" y="270" text-anchor="end">latency →</text>
+  <text class="ax" x="62" y="86" text-anchor="end">requests</text>
+
+  <!-- long-tail curve -->
+  <path d="M70,250 C110,250 130,110 175,100 C215,92 240,150 280,180 C330,215 380,232 440,240
+           C520,248 600,246 660,244 C700,243 720,240 745,236 C770,232 790,230 820,238 C838,243 850,248 860,250 Z"
+        fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+
+  <!-- second hump = cache miss / GC -->
+  <path d="M700,250 C725,250 738,224 760,222 C785,220 800,238 820,246 C835,250 848,250 860,250 Z"
+        fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
+  <text class="ax" x="778" y="212" text-anchor="middle" fill="#b91c1c">cache miss / GC pause</text>
+
+  <!-- percentile markers -->
+  <g stroke-dasharray="4 3">
+    <line x1="185" y1="88" x2="185" y2="250" stroke="#16a34a"/>
+    <line x1="243" y1="120" x2="243" y2="250" stroke="#64748b"/>
+    <line x1="330" y1="130" x2="330" y2="250" stroke="#0891b2"/>
+    <line x1="560" y1="130" x2="560" y2="250" stroke="#d97706"/>
+    <line x1="770" y1="130" x2="770" y2="250" stroke="#dc2626"/>
+  </g>
+  <text class="pk" x="185" y="80" text-anchor="middle" fill="#16a34a">p50 · 40 ms</text>
+  <text class="pk" x="243" y="112" text-anchor="middle" fill="#64748b">mean</text>
+  <text class="pk" x="330" y="122" text-anchor="middle" fill="#0891b2">p90 · 110 ms</text>
+  <text class="pk" x="560" y="122" text-anchor="middle" fill="#d97706">p99 · 600 ms</text>
+  <text class="pk" x="770" y="122" text-anchor="middle" fill="#dc2626">p99.9 · 1.1 s</text>
+
+  <!-- callouts -->
+  <rect x="70" y="284" width="256" height="42" rx="6" fill="#f0fdf4" stroke="#86efac"/>
+  <text class="note" x="82" y="302">A page making 100 requests hits a p99</text>
+  <text class="note" x="82" y="318">at least once with ~63% probability.</text>
+
+  <rect x="338" y="284" width="256" height="42" rx="6" fill="#fff7ed" stroke="#fdba74"/>
+  <text class="note" x="350" y="302">Your heaviest users have the most</text>
+  <text class="note" x="350" y="318">data — so they are always in the tail.</text>
+
+  <rect x="606" y="284" width="254" height="42" rx="6" fill="#fef2f2" stroke="#fca5a5"/>
+  <text class="note" x="618" y="302">The mean hides bimodality: cache hit</text>
+  <text class="note" x="618" y="318">vs miss are two different systems.</text>
+</svg>

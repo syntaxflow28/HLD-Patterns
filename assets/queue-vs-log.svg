@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" role="img" aria-label="Message queue versus append-only log">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .hd{font-size:14px;font-weight:700}
+    .n{font-size:11px;font-weight:700;fill:#ffffff}
+    .b{font-size:11.5px;fill:#334155}
+    .sm{font-size:10.5px;fill:#64748b}
+    .off{font-size:10.5px;font-weight:700;fill:#0f172a}
+  </style>
+  <rect width="900" height="400" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Queue vs Log — the distinction that decides Kafka vs SQS</text>
+  <text class="sub" x="24" y="52">A queue destroys a message once it is acked. A log keeps it, and every consumer group tracks its own position.</text>
+
+  <!-- QUEUE -->
+  <rect x="24" y="72" width="418" height="150" rx="10" fill="#fff7ed" stroke="#fdba74"/>
+  <text class="hd" x="44" y="98" fill="#9a3412">Message Queue — RabbitMQ, SQS</text>
+
+  <rect x="44" y="112" width="66" height="34" rx="6" fill="#94a3b8"/>
+  <text class="n" x="77" y="133" text-anchor="middle">Producer</text>
+  <line x1="110" y1="129" x2="140" y2="129" stroke="#ea580c" stroke-width="2" marker-end="url(#q1)"/>
+  <defs><marker id="q1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#ea580c"/></marker></defs>
+
+  <rect x="144" y="110" width="150" height="38" rx="6" fill="#fed7aa" stroke="#ea580c"/>
+  <g fill="#ea580c">
+    <rect x="152" y="118" width="20" height="22" rx="3"/><rect x="176" y="118" width="20" height="22" rx="3"/>
+    <rect x="200" y="118" width="20" height="22" rx="3"/><rect x="224" y="118" width="20" height="22" rx="3"/>
+  </g>
+  <text class="sm" x="219" y="163" text-anchor="middle">messages waiting</text>
+
+  <line x1="294" y1="122" x2="330" y2="122" stroke="#ea580c" stroke-width="2" marker-end="url(#q1)"/>
+  <line x1="294" y1="140" x2="330" y2="140" stroke="#ea580c" stroke-width="2" marker-end="url(#q1)"/>
+  <rect x="334" y="108" width="86" height="24" rx="5" fill="#ea580c"/>
+  <text class="n" x="377" y="124" text-anchor="middle">Consumer A</text>
+  <rect x="334" y="136" width="86" height="24" rx="5" fill="#ea580c"/>
+  <text class="n" x="377" y="152" text-anchor="middle">Consumer B</text>
+  <text class="sm" x="377" y="176" text-anchor="middle">compete for messages</text>
+
+  <text class="b" x="44" y="198">Acked → <tspan font-weight="700" fill="#b91c1c">deleted forever</tspan>. No replay. Adding a new consumer</text>
+  <text class="b" x="44" y="214">team means a new queue and a fan-out exchange upstream.</text>
+
+  <!-- LOG -->
+  <rect x="458" y="72" width="418" height="150" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="hd" x="478" y="98" fill="#1e3a8a">Append-only Log — Kafka, Pulsar, Kinesis</text>
+
+  <rect x="478" y="112" width="66" height="34" rx="6" fill="#94a3b8"/>
+  <text class="n" x="511" y="133" text-anchor="middle">Producer</text>
+  <line x1="544" y1="129" x2="568" y2="129" stroke="#2563eb" stroke-width="2" marker-end="url(#q2)"/>
+  <defs><marker id="q2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker></defs>
+
+  <g>
+    <rect x="572" y="112" width="286" height="34" rx="4" fill="#dbeafe" stroke="#2563eb"/>
+    <g fill="#3b82f6">
+      <rect x="576" y="116" width="24" height="26" rx="2"/><rect x="604" y="116" width="24" height="26" rx="2"/>
+      <rect x="632" y="116" width="24" height="26" rx="2"/><rect x="660" y="116" width="24" height="26" rx="2"/>
+      <rect x="688" y="116" width="24" height="26" rx="2"/><rect x="716" y="116" width="24" height="26" rx="2"/>
+      <rect x="744" y="116" width="24" height="26" rx="2"/><rect x="772" y="116" width="24" height="26" rx="2"/>
+      <rect x="800" y="116" width="24" height="26" rx="2"/><rect x="828" y="116" width="24" height="26" rx="2"/>
+    </g>
+    <g class="off" text-anchor="middle" fill="#64748b" font-size="9">
+      <text x="588" y="158">0</text><text x="672" y="158">3</text><text x="756" y="158">6</text><text x="840" y="158">9</text>
+    </g>
+  </g>
+  <text class="sm" x="715" y="174" text-anchor="middle">retained for N days — nothing is deleted on read</text>
+
+  <circle cx="700" cy="106" r="5" fill="#16a34a"/>
+  <text class="sm" x="700" y="100" text-anchor="middle" fill="#15803d">group A · offset 4</text>
+  <circle cx="812" cy="106" r="5" fill="#d97706"/>
+  <text class="sm" x="812" y="100" text-anchor="middle" fill="#b45309">group B · offset 8</text>
+
+  <text class="b" x="478" y="198">Each consumer group has its own cursor. Add a team → new group,</text>
+  <text class="b" x="478" y="214">start at offset 0. <tspan font-weight="700" fill="#15803d">Reset the offset to reprocess history.</tspan></text>
+
+  <!-- ordering -->
+  <rect x="24" y="238" width="852" height="90" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text class="hd" x="44" y="262" fill="#0f172a">Ordering is per-partition, never global</text>
+  <text class="b" x="44" y="282">partition = hash(key) → all events for one user / account / conversation land in one partition, in order.</text>
+
+  <rect x="44" y="292" width="240" height="22" rx="3" fill="#c7d2fe"/><text class="off" x="52" y="307">P0 · user_1, user_1, user_1 …</text>
+  <rect x="296" y="292" width="240" height="22" rx="3" fill="#bfdbfe"/><text class="off" x="304" y="307">P1 · user_2, user_2 …</text>
+  <rect x="548" y="292" width="240" height="22" rx="3" fill="#a5f3fc"/><text class="off" x="556" y="307">P2 · user_3, user_3 …</text>
+  <text class="sm" x="800" y="307">↑ max parallelism = partition count</text>
+
+  <rect x="24" y="342" width="852" height="46" rx="8" fill="#fef3c7" stroke="#fcd34d"/>
+  <text class="b" x="40" y="362" font-weight="700">Pick the log when:</text>
+  <text class="b" x="176" y="362">multiple independent consumers · replay/backfill needed · very high volume · stream processing downstream</text>
+  <text class="b" x="40" y="380" font-weight="700">Pick the queue when:</text>
+  <text class="b" x="186" y="380">per-message delay or priority · complex routing · one worker pool · low volume (or just use a DB table + poller)</text>
+</svg>

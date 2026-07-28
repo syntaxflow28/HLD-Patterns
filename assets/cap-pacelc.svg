@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" width="900" height="420" role="img" aria-label="CAP theorem triangle and the PACELC extension">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .v{font-size:14px;font-weight:700}
+    .hd{font-size:13px;font-weight:700;fill:#0f172a}
+    .b{font-size:11.5px;fill:#334155}
+    .sm{font-size:10.5px;fill:#64748b}
+    .badge{font-size:11px;font-weight:700;fill:#ffffff}
+  </style>
+  <rect width="900" height="420" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">CAP is about the partition case only. PACELC covers the other 99.9% of the time.</text>
+  <text class="sub" x="24" y="52">Saying “pick two” is the classic tell. Partitions are not a choice — they happen to you. C vs A is what you choose in response.</text>
+
+  <!-- triangle -->
+  <polygon points="200,96 92,290 308,290" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+  <circle cx="200" cy="96" r="7" fill="#2563eb"/>
+  <circle cx="92" cy="290" r="7" fill="#16a34a"/>
+  <circle cx="308" cy="290" r="7" fill="#dc2626"/>
+  <text class="v" x="200" y="84" text-anchor="middle" fill="#1e3a8a">C — Consistency</text>
+  <text class="sm" x="200" y="70" text-anchor="middle">every read sees the latest write</text>
+  <text class="v" x="76" y="312" text-anchor="middle" fill="#14532d">A — Availability</text>
+  <text class="sm" x="76" y="328" text-anchor="middle">every request gets a response</text>
+  <text class="v" x="326" y="312" text-anchor="middle" fill="#991b1b">P — Partition tolerance</text>
+  <text class="sm" x="326" y="328" text-anchor="middle">not optional on a network</text>
+
+  <!-- CP / AP edges -->
+  <line x1="200" y1="96" x2="308" y2="290" stroke="#7c3aed" stroke-width="4"/>
+  <text class="badge" x="272" y="186" fill="#5b21b6" font-size="12">CP</text>
+  <line x1="92" y1="290" x2="308" y2="290" stroke="#0d9488" stroke-width="4"/>
+  <text class="badge" x="200" y="284" fill="#0f766e" font-size="12" text-anchor="middle">AP</text>
+  <line x1="200" y1="96" x2="92" y2="290" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5 4"/>
+  <text class="sm" x="112" y="190" fill="#94a3b8">CA — single node only</text>
+
+  <text class="b" x="200" y="356" text-anchor="middle" font-weight="700">During a partition you must sacrifice C or A.</text>
+  <text class="sm" x="200" y="374" text-anchor="middle">There is no third option and no “pick two”.</text>
+
+  <!-- PACELC -->
+  <rect x="376" y="80" width="500" height="152" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="hd" x="396" y="104">PACELC — use this framing instead</text>
+  <rect x="396" y="118" width="200" height="46" rx="7" fill="#dc2626"/>
+  <text class="badge" x="496" y="138" text-anchor="middle">IF Partition (rare)</text>
+  <text class="badge" x="496" y="155" text-anchor="middle">trade A vs C</text>
+  <rect x="620" y="118" width="236" height="46" rx="7" fill="#0284c7"/>
+  <text class="badge" x="738" y="138" text-anchor="middle">ELSE — normal operation (always)</text>
+  <text class="badge" x="738" y="155" text-anchor="middle">trade Latency vs C</text>
+  <text class="b" x="396" y="186">The “else” branch is where your system actually lives. Strong consistency</text>
+  <text class="b" x="396" y="204">costs a quorum round trip on every operation, partition or not — that is a</text>
+  <text class="b" x="396" y="222">latency bill you pay every single day, not just during an outage.</text>
+
+  <!-- classification table -->
+  <rect x="376" y="244" width="500" height="160" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text class="hd" x="396" y="268">Where real systems sit</text>
+  <line x1="396" y1="278" x2="856" y2="278" stroke="#e2e8f0"/>
+  <g class="b">
+    <text x="396" y="298" font-weight="700">PC / EC</text><text x="486" y="298">Spanner, etcd, ZooKeeper, HBase</text><text x="700" y="298" fill="#64748b">consistent always, pays latency</text>
+    <text x="396" y="322" font-weight="700">PA / EL</text><text x="486" y="322">Cassandra, Riak, Dynamo-style</text><text x="700" y="322" fill="#64748b">available and fast, eventual</text>
+    <text x="396" y="346" font-weight="700">PA / EC</text><text x="486" y="346">MongoDB (default settings)</text><text x="700" y="346" fill="#64748b">consistent normally, AP on split</text>
+    <text x="396" y="370" font-weight="700">tunable</text><text x="486" y="370">DynamoDB, Cassandra quorums</text><text x="700" y="370" fill="#64748b">choose per request</text>
+  </g>
+  <text class="sm" x="396" y="394">Best answer: “consistency is a per-operation choice, not a per-database one — I’d use strong reads for balance checks and eventual for the activity feed.”</text>
+</svg>

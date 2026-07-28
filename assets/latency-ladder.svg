@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" role="img" aria-label="Latency numbers every engineer should know, on a logarithmic scale">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .op{font-size:12px;fill:#0f172a}
+    .val{font-size:12px;font-weight:700;fill:#0f172a}
+    .ax{font-size:10.5px;fill:#94a3b8}
+    .note{font-size:11.5px;fill:#334155}
+  </style>
+  <rect width="900" height="400" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Latency ladder — logarithmic scale</text>
+  <text class="sub" x="24" y="52">Ratios matter more than absolutes. Memory is ~1000× SSD; a same-DC hop is ~20× cheaper than a disk seek.</text>
+
+  <!-- log axis: x = 250 + 55 * log10(ns).  0.5ns -> 233 ; 1.5e8 ns(150ms) -> 703 -->
+  <line x1="250" y1="332" x2="860" y2="332" stroke="#cbd5e1"/>
+  <g class="ax" text-anchor="middle">
+    <text x="250" y="350">1 ns</text>
+    <text x="415" y="350">1 µs</text>
+    <text x="580" y="350">1 ms</text>
+    <text x="745" y="350">1 s</text>
+  </g>
+  <g stroke="#e2e8f0" stroke-dasharray="3 3">
+    <line x1="250" y1="72" x2="250" y2="332"/>
+    <line x1="415" y1="72" x2="415" y2="332"/>
+    <line x1="580" y1="72" x2="580" y2="332"/>
+    <line x1="745" y1="72" x2="745" y2="332"/>
+  </g>
+
+  <!-- rows: y from 82 step 25 -->
+  <!-- L1 0.5ns -> 250+55*log10(0.5)= 250-16.6 = 233 ; clamp start at 250 -->
+  <g class="op" text-anchor="end">
+    <text x="238" y="86">L1 cache reference</text>
+    <text x="238" y="111">Branch mispredict</text>
+    <text x="238" y="136">L2 cache reference</text>
+    <text x="238" y="161">Mutex lock / unlock</text>
+    <text x="238" y="186" font-weight="700">Main memory reference</text>
+    <text x="238" y="211">Send 1 KB over 1 Gbps</text>
+    <text x="238" y="236" font-weight="700">SSD random read</text>
+    <text x="238" y="261" font-weight="700">Round trip, same datacenter</text>
+    <text x="238" y="286" font-weight="700">Disk seek (HDD)</text>
+    <text x="238" y="311" font-weight="700">Round trip, US ↔ Europe</text>
+  </g>
+
+  <!-- bars start at x=250 -->
+  <rect x="250" y="76" width="4"   height="12" rx="2" fill="#38bdf8"/>
+  <rect x="250" y="101" width="38"  height="12" rx="2" fill="#38bdf8"/>
+  <rect x="250" y="126" width="46"  height="12" rx="2" fill="#38bdf8"/>
+  <rect x="250" y="151" width="77"  height="12" rx="2" fill="#38bdf8"/>
+  <rect x="250" y="176" width="110" height="12" rx="2" fill="#0284c7"/>
+  <rect x="250" y="201" width="220" height="12" rx="2" fill="#22c55e"/>
+  <rect x="250" y="226" width="275" height="12" rx="2" fill="#eab308"/>
+  <rect x="250" y="251" width="313" height="12" rx="2" fill="#f97316"/>
+  <rect x="250" y="276" width="385" height="12" rx="2" fill="#ef4444"/>
+  <rect x="250" y="301" width="450" height="12" rx="2" fill="#b91c1c"/>
+
+  <g class="val">
+    <text x="262" y="86">0.5 ns</text>
+    <text x="296" y="111">5 ns</text>
+    <text x="304" y="136">7 ns</text>
+    <text x="335" y="161">25 ns</text>
+    <text x="368" y="186">100 ns</text>
+    <text x="478" y="211">10 µs</text>
+    <text x="533" y="236">100 µs</text>
+    <text x="571" y="261">0.5 ms</text>
+    <text x="643" y="286">10 ms</text>
+    <text x="708" y="311">150 ms</text>
+  </g>
+
+  <rect x="24" y="360" width="852" height="28" rx="6" fill="#fef3c7" stroke="#fcd34d"/>
+  <text class="note" x="38" y="378">Design consequence: a network hop to a cache (0.5 ms) beats a local disk seek (10 ms) — this is why distributed caches exist. Cross-continent latency is physics; only a CDN or a regional deployment fixes it.</text>
+</svg>

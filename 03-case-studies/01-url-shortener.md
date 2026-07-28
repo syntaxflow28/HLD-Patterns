@@ -1,0 +1,233 @@
+# Case Study 1 — URL Shortener
+
+**Archetype:** high-volume key-value mapping. The "easy" question that separates
+candidates on estimation, ID design, and cache strategy.
+
+---
+
+## 1. Requirements
+
+**Functional (in scope)**
+1. Create a short URL from a long URL; optional custom alias; optional expiry.
+2. Redirect a short URL to the original.
+3. Basic click analytics per link.
+
+**Out of scope:** user accounts/teams, link editing, malware scanning (mention it),
+QR codes.
+
+**Non-functional**
+
+| Dimension | Target |
+|---|---|
+| Scale | 100 M new URLs/day, 10 B redirects/day |
+| Read:write | ~100:1 → **read dominated** |
+| Latency | Redirect p99 < 50 ms (it is on the user's critical path) |
+| Availability | 99.99% for redirects; 99.9% for creation |
+| Consistency | Redirect must work immediately after creation (read-your-writes) |
+| Retention | Default 5 years, configurable expiry |
+
+---
+
+## 2. Estimation
+
+```
+Writes: 100 M/day  = 100/10^5      = ~1,150 QPS   (peak 3x = ~3.5 K)
+Reads : 10 B/day   = 10,000/10^5   = ~115,000 QPS (peak 3x = ~350 K)
+
+Record: short_key 7 B + long_url ~200 B + metadata ~100 B ≈ ~300 B
+Storage/day  = 100 M x 300 B = 30 GB/day
+Storage/5yr  = ~55 TB  -> x3 replication = ~165 TB
+
+Cache: 20% of daily reads are on ~hot links. Assume 20 M hot keys x 300 B ≈ 6 GB
+       -> the entire hot set fits in memory on 2-3 nodes. Cache is the whole game.
+
+Key space: 62^7 = ~3.5 trillion -> 100 M/day for ~95 years. 7 chars is enough.
+```
+
+**Conclusions**
+1. 350 K peak read QPS with a 6 GB hot set → **cache-first architecture**, DB is a
+   fallback.
+2. 3.5 K peak write QPS → beyond a comfortable single primary at durability targets →
+   shard, or use a KV store.
+3. 165 TB → not a single node → sharded KV (DynamoDB/Cassandra) or sharded RDBMS.
+4. Analytics at 10 B events/day must be **async** — never on the redirect path.
+
+---
+
+## 3. API
+
+```
+POST /v1/urls
+  { longUrl, customAlias?, expiresAt? }        Idempotency-Key: <uuid>
+  -> 201 { shortUrl, shortKey, expiresAt }
+  -> 409 if customAlias taken
+
+GET /{shortKey}
+  -> 302 Found, Location: <longUrl>, Cache-Control: private, max-age=0
+  -> 404 if unknown, 410 if expired
+
+GET /v1/urls/{shortKey}/stats?from=&to=
+  -> { clicks, byDay[], byCountry[], byReferrer[] }
+```
+
+**301 vs 302:** use **302** (temporary). A 301 is cached by browsers forever, which
+kills your analytics and prevents expiry/revocation from working. This is a favourite
+follow-up question.
+
+---
+
+## 4. Key generation — the core design decision
+
+```mermaid
+flowchart TD
+    G{How to generate the short key?}
+    G -->|"A. Hash the URL<br/>md5/sha then take 7 chars"| A["+ deterministic, dedups identical URLs<br/>- collisions need retry loop + a read per write<br/>- custom expiry per user breaks dedup"]
+    G -->|"B. Random 7 chars"| B["+ unguessable<br/>- collision check = read before write<br/>- poor DB locality"]
+    G -->|"C. Counter -> base62"| C["+ no collisions ever, compact<br/>- sequential = enumerable and leaks volume<br/>- needs a distributed counter"]
+    G -->|"D. Snowflake -> base62"| D["+ no coordination, no collisions<br/>- 11 chars unless you trim<br/>- still time-ordered/enumerable"]
+    G -->|"E. Pre-generated key pool"| E["+ O(1) write, no collision check<br/>+ keys can be random AND unique<br/>- needs a key-generation service + pool store"]
+    style E fill:#cfe,color:#000
+```
+
+**Choice: counter-based with pre-allocated ranges, then obfuscated.**
+
+```
+1. A ticket service (or ZooKeeper/etcd) hands each app instance a range, e.g. [3M, 4M).
+2. Instance increments locally  -> zero coordination per request.
+3. Obfuscate before encoding: encrypt the counter with a fixed key (Feistel/skip32)
+   -> IDs are unique, non-sequential, non-enumerable.
+4. base62 encode -> 7 characters.
+```
+This gives no collision checks, no read-before-write, uniqueness by construction, and
+non-guessable keys. Losing a range on instance crash just burns some key space — with
+3.5 trillion keys, who cares.
+
+Custom aliases go through a **conditional write** (`INSERT ... IF NOT EXISTS`) in a
+separate namespace so they can't collide with generated keys (e.g. reserve a prefix or
+check the pool).
+
+---
+
+## 5. Data model
+
+```
+Table urls            (KV store, e.g. DynamoDB / Cassandra)
+  PK: short_key       <- hash-partitioned: perfectly uniform, all access is point lookup
+  long_url, created_at, expires_at, owner_id, is_active
+
+Table clicks_raw      (append-only, time-partitioned; or straight to Kafka -> lake)
+  PK: (short_key, bucket_hour)   CK: click_id
+  ts, ip_country, referrer, user_agent_class
+
+Table click_stats     (pre-aggregated for the stats API)
+  PK: (short_key, day)   clicks, uniques(HLL), top_countries
+```
+`short_key` is a near-perfect shard key: extremely high cardinality, uniformly random,
+and present in 100% of queries. Say this explicitly — it is exactly what the
+interviewer wants to hear about shard key selection.
+
+---
+
+## 6. Architecture
+
+```mermaid
+flowchart LR
+    U[User] --> DNS[GeoDNS]
+    DNS --> CDN["CDN / Edge<br/>can even serve redirects for top links"]
+    CDN --> LB[Load Balancer]
+    LB --> RS["Redirect Service<br/>stateless, autoscaled"]
+    LB --> WS[Write Service]
+
+    RS --> CACHE[("Redis cluster<br/>short_key to long_url")]
+    CACHE -.miss ~5%.-> KV[(KV store, sharded)]
+    RS -->|"fire and forget"| KQ[[Kafka: click events]]
+
+    WS --> KEYS[Key range allocator]
+    WS --> KV
+    WS -->|write-through| CACHE
+
+    KQ --> AGG["Stream aggregation<br/>windowed counts + HLL uniques"]
+    AGG --> STATS[(click_stats)]
+    KQ --> LAKE[(Data lake -> warehouse)]
+    STATS --> SAPI[Stats API]
+```
+
+**Redirect path (the hot path):**
+`Edge → LB → Redirect Service → Redis (95% hit, ~1 ms) → 302`.
+On miss: KV point lookup (~5 ms), populate cache with a jittered TTL.
+The click event is published asynchronously and **never blocks the redirect** — if
+Kafka is down, we log locally and keep redirecting.
+
+**Write path:** allocate key from the local range → conditional write to KV →
+write-through to cache (gives immediate read-your-writes) → return.
+
+---
+
+## 7. Deep dives
+
+### Cache strategy
+- **Cache-aside + write-through on create** so a new link is instantly redirectable.
+- TTL ~24 h with jitter; hot links effectively never expire because they're re-read.
+- Negative caching for 404s with a short TTL (30 s) — otherwise scanners hammering
+  random keys become a **cache penetration** attack on your KV store. Add a Bloom
+  filter of existing keys for extra protection.
+- Consistent hashing across Redis nodes so losing one node costs 1/N of the hit rate,
+  not all of it.
+
+### Hot key
+One viral link can exceed a single Redis node's capacity. Fix with an **in-process LRU
+cache** in the Redirect Service with a 1–5 s TTL. With 200 instances, that caps Redis
+QPS for that key at ~40/s regardless of traffic. Cheapest possible fix.
+
+### Analytics without killing the redirect
+10 B click events/day = ~115 K events/s.
+- Batch events in-process and flush to Kafka every 100 ms.
+- Stream-aggregate into per-(link, hour) counters; use HyperLogLog for unique visitors.
+- Exact counts are not required → approximation is a legitimate, cheaper choice.
+
+### Expiry & deletion
+Lazy expiry on read (check `expires_at`, return 410) plus a background sweeper for
+storage reclamation. TTL support in DynamoDB/Cassandra does this natively.
+
+### Abuse
+Malicious/phishing URLs: async scan against a safe-browsing list; a blocklist checked
+at redirect time from a small in-memory set; rate limit creation per IP/account.
+
+---
+
+## 8. Failure modes
+
+| Failure | Behaviour |
+|---|---|
+| Redis cluster down | Redirects fall through to KV. Latency 1 ms → 5–10 ms, KV must be provisioned for the fallback burst, or shed non-critical traffic. **Have this answer ready.** |
+| KV shard down | That shard's keys 503. Multi-AZ replicas with automatic failover; reads can be served from replicas |
+| Kafka down | Redirects continue; click events buffered on disk locally, replayed later. Analytics is degraded, core function is not |
+| Key allocator down | Instances keep serving from their current range; allocate large ranges so the outage window is survivable (**static stability**) |
+| Region down | GeoDNS/anycast fails over; KV replicated cross-region async; a few seconds of recent writes may be missing |
+
+---
+
+## 9. Scale evolution
+
+- **10x reads (3.5 M QPS):** push redirects to the CDN/edge for the top 1% of links
+  (they serve the vast majority of traffic); edge KV (Cloudflare Workers KV) as a
+  second tier.
+- **10x writes (35 K QPS):** already sharded by `short_key`; just add shards. The key
+  allocator is range-based so it doesn't become a bottleneck.
+- **Multi-region:** the mapping is immutable after creation → **trivially replicable**.
+  Use active-active with async replication; the only conflict risk is custom aliases,
+  which you resolve by making alias creation go through a single region or a
+  consensus-backed uniqueness check.
+
+---
+
+## 10. Trade-offs summary
+
+| Decision | Chose | Alternative | Why |
+|---|---|---|---|
+| Key generation | Counter ranges + obfuscation | Hash of URL | No collision checks, no read-before-write, unguessable |
+| Store | Sharded KV | RDBMS | Pure point lookups at 350 K QPS; no joins needed |
+| Redirect code | 302 | 301 | Preserves analytics, allows expiry/revocation |
+| Analytics | Async + approximate (HLL) | Sync exact counters | Never slow down the redirect; exactness isn't required |
+| Cache | Redis + in-process L1 | Redis only | Handles hot keys and reduces network hops |
+| Consistency | Read-your-writes via write-through | Full strong consistency | Mapping is immutable, so eventual is fine elsewhere |

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" width="900" height="300" role="img" aria-label="Snowflake 64 bit ID layout">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .n{font-size:12.5px;font-weight:700;fill:#ffffff}
+    .p{font-size:10.5px;fill:#ffffff}
+    .b{font-size:11.5px;fill:#334155}
+    .bit{font-size:10px;fill:#94a3b8}
+    .hd{font-size:12.5px;font-weight:700;fill:#0f172a}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;fill:#0f172a}
+  </style>
+  <rect width="900" height="300" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Snowflake ID — 64 bits, time-sortable, zero coordination per request</text>
+  <text class="sub" x="24" y="52">The reason it beats a database sequence: no network call, no single writer, and IDs still sort by creation time.</text>
+
+  <!-- bit ruler -->
+  <g class="bit">
+    <text x="40" y="80">bit 63</text>
+    <text x="120" y="80">62</text>
+    <text x="520" y="80">22</text>
+    <text x="660" y="80">12</text>
+    <text x="850" y="80" text-anchor="end">0</text>
+  </g>
+
+  <!-- fields -->
+  <rect x="40" y="86" width="44" height="54" rx="5" fill="#94a3b8"/>
+  <text class="n" x="62" y="110" text-anchor="middle">0</text>
+  <text class="p" x="62" y="128" text-anchor="middle">1 bit</text>
+
+  <rect x="88" y="86" width="440" height="54" rx="5" fill="#2563eb"/>
+  <text class="n" x="308" y="110" text-anchor="middle">timestamp — ms since a custom epoch</text>
+  <text class="p" x="308" y="128" text-anchor="middle">41 bits → ~69 years of range</text>
+
+  <rect x="532" y="86" width="130" height="54" rx="5" fill="#16a34a"/>
+  <text class="n" x="597" y="110" text-anchor="middle">machine id</text>
+  <text class="p" x="597" y="128" text-anchor="middle">10 bits → 1024 nodes</text>
+
+  <rect x="666" y="86" width="194" height="54" rx="5" fill="#d97706"/>
+  <text class="n" x="763" y="110" text-anchor="middle">sequence</text>
+  <text class="p" x="763" y="128" text-anchor="middle">12 bits → 4096 ids per ms per node</text>
+
+  <text class="bit" x="62" y="156" text-anchor="middle">unused sign bit</text>
+  <text class="bit" x="308" y="156" text-anchor="middle">↑ this is what makes IDs sortable and index-friendly</text>
+  <text class="bit" x="597" y="156" text-anchor="middle">assigned via etcd / k8s ordinal</text>
+  <text class="bit" x="763" y="156" text-anchor="middle">resets each millisecond</text>
+
+  <text class="mono" x="24" y="184">throughput ceiling = 4096 × 1000 × 1024 ≈ 4.2 billion IDs / second</text>
+
+  <!-- caveats -->
+  <rect x="24" y="198" width="418" height="88" rx="8" fill="#fef2f2" stroke="#fca5a5"/>
+  <text class="hd" x="40" y="220">Caveats an interviewer will probe</text>
+  <text class="b" x="40" y="240">• <tspan font-weight="700">Clock moving backwards</tspan> (NTP correction) → duplicate IDs.</text>
+  <text class="b" x="52" y="256">Fix: refuse to issue until the clock catches up, or use a logical clock.</text>
+  <text class="b" x="40" y="274">• <tspan font-weight="700">Leaks information</tspan> — creation time and issuance rate are public.</text>
+
+  <rect x="458" y="198" width="418" height="88" rx="8" fill="#f0fdf4" stroke="#86efac"/>
+  <text class="hd" x="474" y="220">Alternatives, and when</text>
+  <text class="b" x="474" y="240">• <tspan font-weight="700">UUIDv7 / ULID</tspan> — same properties, no machine-id assignment, 128 bits.</text>
+  <text class="b" x="474" y="258">• <tspan font-weight="700">DB ticket server with ranges</tspan> — simplest when you already have a DB.</text>
+  <text class="b" x="474" y="276">• <tspan font-weight="700">UUIDv4</tspan> — unique but random → destroys B-tree insert locality. Avoid as a PK.</text>
+</svg>

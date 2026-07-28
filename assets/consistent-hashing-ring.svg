@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 430" width="900" height="430" role="img" aria-label="Consistent hashing ring with virtual nodes">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .nd{font-size:11.5px;font-weight:700}
+    .hd{font-size:13px;font-weight:700;fill:#0f172a}
+    .b{font-size:11.5px;fill:#334155}
+    .key{font-size:11px;font-weight:600;fill:#0f172a}
+    .ax{font-size:10.5px;fill:#94a3b8}
+  </style>
+  <rect width="900" height="430" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">Consistent hashing — add or remove a node and only ~1/N of keys move</text>
+  <text class="sub" x="24" y="52">With hash(key) % N, changing N remaps almost every key. On a ring, a key walks clockwise to the next node.</text>
+
+  <!-- ring -->
+  <circle cx="240" cy="250" r="130" fill="none" stroke="#cbd5e1" stroke-width="14"/>
+  <text class="ax" x="240" y="106" text-anchor="middle">hash space 0</text>
+  <text class="ax" x="392" y="254" text-anchor="start">2³²/4</text>
+  <text class="ax" x="240" y="400" text-anchor="middle">2³²/2</text>
+
+  <!-- 12 vnodes: A,B,C,D repeating -->
+  <g>
+    <circle cx="240" cy="120" r="11" fill="#2563eb"/><text class="nd" x="240" y="90" text-anchor="middle" fill="#1e3a8a">A₁</text>
+    <circle cx="305" cy="137" r="11" fill="#16a34a"/><text class="nd" x="324" y="110" text-anchor="middle" fill="#14532d">B₁</text>
+    <circle cx="353" cy="185" r="11" fill="#d97706"/><text class="nd" x="380" y="166" text-anchor="middle" fill="#92400e">C₁</text>
+    <circle cx="370" cy="250" r="11" fill="#7c3aed"/><text class="nd" x="400" y="254" text-anchor="middle" fill="#5b21b6">D₁</text>
+    <circle cx="353" cy="315" r="11" fill="#2563eb"/><text class="nd" x="380" y="338" text-anchor="middle" fill="#1e3a8a">A₂</text>
+    <circle cx="305" cy="363" r="11" fill="#16a34a"/><text class="nd" x="324" y="392" text-anchor="middle" fill="#14532d">B₂</text>
+    <circle cx="240" cy="380" r="11" fill="#d97706"/><text class="nd" x="240" y="412" text-anchor="middle" fill="#92400e">C₂</text>
+    <circle cx="175" cy="363" r="11" fill="#7c3aed"/><text class="nd" x="156" y="392" text-anchor="middle" fill="#5b21b6">D₂</text>
+    <circle cx="127" cy="315" r="11" fill="#2563eb"/><text class="nd" x="100" y="338" text-anchor="middle" fill="#1e3a8a">A₃</text>
+    <circle cx="110" cy="250" r="11" fill="#16a34a"/><text class="nd" x="80" y="254" text-anchor="middle" fill="#14532d">B₃</text>
+    <circle cx="127" cy="185" r="11" fill="#d97706"/><text class="nd" x="100" y="166" text-anchor="middle" fill="#92400e">C₃</text>
+    <circle cx="175" cy="137" r="11" fill="#7c3aed"/><text class="nd" x="156" y="110" text-anchor="middle" fill="#5b21b6">D₃</text>
+  </g>
+
+  <!-- key placement -->
+  <circle cx="273" cy="127" r="5" fill="#0f172a"/>
+  <path d="M273,127 A130,130 0 0,1 303,136" fill="none" stroke="#0f172a" stroke-width="2" marker-end="url(#ar)"/>
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#0f172a"/></marker></defs>
+  <text class="key" x="240" y="180" text-anchor="middle">hash("user:42")</text>
+  <text class="key" x="240" y="196" text-anchor="middle">→ walk clockwise → B₁</text>
+
+  <text class="b" x="240" y="238" text-anchor="middle" font-weight="700">4 physical nodes</text>
+  <text class="b" x="240" y="256" text-anchor="middle">× 3 virtual nodes each</text>
+  <text class="b" x="240" y="280" text-anchor="middle" font-style="italic">(production: 100–256 vnodes)</text>
+
+  <!-- right panel -->
+  <rect x="450" y="80" width="426" height="106" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+  <text class="hd" x="466" y="102">Why virtual nodes?</text>
+  <text class="b" x="466" y="124">Without them, one node owns one contiguous arc — load is uneven,</text>
+  <text class="b" x="466" y="142">and when it dies its entire range dumps onto a single neighbour,</text>
+  <text class="b" x="466" y="160">which then falls over too. With vnodes, the load of a dead node</text>
+  <text class="b" x="466" y="178">spreads evenly across every survivor.</text>
+
+  <rect x="450" y="198" width="426" height="88" rx="8" fill="#f0fdf4" stroke="#86efac"/>
+  <text class="hd" x="466" y="220">Adding node E</text>
+  <text class="b" x="466" y="242">E's vnodes land between existing points. Only the keys in those</text>
+  <text class="b" x="466" y="260">small arcs move — roughly 1/5 of the keyspace, taken proportionally</text>
+  <text class="b" x="466" y="278">from A, B, C and D. Nothing else is disturbed.</text>
+
+  <rect x="450" y="298" width="426" height="112" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text class="hd" x="466" y="320">Where you will use it</text>
+  <text class="b" x="466" y="342">• Sharded Redis / Memcached client routing</text>
+  <text class="b" x="466" y="360">• Cassandra, DynamoDB, Riak partitioning</text>
+  <text class="b" x="466" y="378">• Sticky WebSocket / session routing at the load balancer</text>
+  <text class="b" x="466" y="396">• CDN cache-key → origin shard mapping</text>
+</svg>

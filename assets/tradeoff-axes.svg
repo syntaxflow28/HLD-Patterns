@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" role="img" aria-label="The eight trade-off axes in system design">
+  <style>
+    text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    .ttl{font-size:18px;font-weight:700;fill:#0f172a}
+    .sub{font-size:12.5px;fill:#64748b}
+    .lbl{font-size:11.5px;font-weight:700;fill:#0f172a}
+    .end{font-size:10.5px;fill:#64748b}
+    .note{font-size:10px;fill:#94a3b8}
+  </style>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2563eb"/><stop offset="50%" stop-color="#cbd5e1"/><stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="400" fill="#fbfcfd"/>
+  <text class="ttl" x="24" y="32">The eight axes — every design decision moves a slider, and every slider has a price</text>
+  <text class="sub" x="24" y="52">Seniority is shown by naming the axis, stating where you are putting the marker, and saying what you gave up to get there.</text>
+
+  <g>
+    <!-- 1 -->
+    <text class="lbl" x="24" y="94">Consistency</text>
+    <text class="end" x="200" y="94" text-anchor="end">strong</text>
+    <rect x="210" y="84" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="94">eventual</text>
+    <circle cx="560" cy="90" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="94">money → left · feeds &amp; counts → right</text>
+
+    <!-- 2 -->
+    <text class="lbl" x="24" y="128">Latency</text>
+    <text class="end" x="200" y="128" text-anchor="end">fast</text>
+    <rect x="210" y="118" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="128">fresh</text>
+    <circle cx="330" cy="124" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="128">caching is buying speed with staleness</text>
+
+    <!-- 3 -->
+    <text class="lbl" x="24" y="162">Write path</text>
+    <text class="end" x="200" y="162" text-anchor="end">precompute</text>
+    <rect x="210" y="152" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="162">compute on read</text>
+    <circle cx="430" cy="158" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="162">read:write ratio decides this one</text>
+
+    <!-- 4 -->
+    <text class="lbl" x="24" y="196">Coupling</text>
+    <text class="end" x="200" y="196" text-anchor="end">synchronous</text>
+    <rect x="210" y="186" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="196">asynchronous</text>
+    <circle cx="500" cy="192" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="196">async buys availability, costs ordering</text>
+
+    <!-- 5 -->
+    <text class="lbl" x="24" y="230">Normalization</text>
+    <text class="end" x="200" y="230" text-anchor="end">normalized</text>
+    <rect x="210" y="220" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="230">denormalized</text>
+    <circle cx="470" cy="226" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="230">at scale you duplicate data on purpose</text>
+
+    <!-- 6 -->
+    <text class="lbl" x="24" y="264">Cost</text>
+    <text class="end" x="200" y="264" text-anchor="end">cheap</text>
+    <rect x="210" y="254" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="264">redundant</text>
+    <circle cx="410" cy="260" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="264">each extra nine ≈ 10× the spend</text>
+
+    <!-- 7 -->
+    <text class="lbl" x="24" y="298">Complexity</text>
+    <text class="end" x="200" y="298" text-anchor="end">simple</text>
+    <rect x="210" y="288" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="298">optimal</text>
+    <circle cx="300" cy="294" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="298">start simple; complexity needs a trigger</text>
+
+    <!-- 8 -->
+    <text class="lbl" x="24" y="332">Availability</text>
+    <text class="end" x="200" y="332" text-anchor="end">correctness</text>
+    <rect x="210" y="322" width="440" height="12" rx="6" fill="url(#g)"/>
+    <text class="end" x="660" y="332">uptime</text>
+    <circle cx="520" cy="328" r="7" fill="#0f172a"/>
+    <text class="note" x="740" y="332">CAP, restated in business terms</text>
+  </g>
+
+  <rect x="24" y="352" width="852" height="34" rx="6" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text class="sub" x="40" y="373" fill="#334155">Say it out loud like this: <tspan font-style="italic" fill="#0f172a">“I’m putting the marker here because reads outnumber writes 100:1 and a 30-second stale like-count is acceptable. If the product later needs exact counts, I move left by adding a synchronous write-through path for that one field.”</tspan></text>
+</svg>
