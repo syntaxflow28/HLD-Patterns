@@ -9,63 +9,63 @@
     .ar{font-size:11.5px;font-weight:600;fill:#475569}
   </style>
   <rect width="900" height="400" fill="#fbfcfd"/>
-  <text class="ttl" x="24" y="32">The cache hierarchy — ask at every layer: “can this be answered here instead of one layer down?”</text>
+  <text class="ttl" x="24" y="32">The cache hierarchy — can this be answered here instead of one layer down?</text>
   <text class="sub" x="24" y="52">Each step down is roughly 10–100× slower and 10× larger. A request that reaches the disk has failed six opportunities.</text>
 
   <text class="hd" x="330" y="82" text-anchor="end">LAYER</text>
-  <text class="hd" x="560" y="82">TYPICAL LATENCY</text>
-  <text class="hd" x="720" y="82">CAPACITY</text>
-  <text class="hd" x="836" y="82">WHAT IT SERVES</text>
+  <text class="hd" x="410" y="82">TYPICAL LATENCY</text>
+  <text class="hd" x="560" y="82">CAPACITY</text>
+  <text class="hd" x="680" y="82">WHAT IT SERVES</text>
 
   <!-- pyramid layers: widening trapezoids -->
   <g>
     <path d="M170,92 L330,92 L338,128 L162,128 Z" fill="#1d4ed8"/>
     <text class="lyr" x="250" y="115" text-anchor="middle">Browser / client cache</text>
-    <text class="m" x="560" y="115">0 ms (no request)</text>
-    <text class="m" x="720" y="115">~100 MB</text>
-    <text class="m" x="836" y="115">immutable assets, ETags</text>
+    <text class="m" x="410" y="115">0 ms (no request)</text>
+    <text class="m" x="560" y="115">~100 MB</text>
+    <text class="m" x="680" y="115">immutable assets, ETags</text>
   </g>
   <g>
     <path d="M162,132 L338,132 L346,168 L154,168 Z" fill="#2563eb"/>
     <text class="lyr" x="250" y="155" text-anchor="middle">CDN / edge PoP</text>
-    <text class="m" x="560" y="155">5–40 ms</text>
-    <text class="m" x="720" y="155">TB per PoP</text>
-    <text class="m" x="836" y="155">media, static, public API</text>
+    <text class="m" x="410" y="155">5–40 ms</text>
+    <text class="m" x="560" y="155">TB per PoP</text>
+    <text class="m" x="680" y="155">media, static, public API</text>
   </g>
   <g>
     <path d="M154,172 L346,172 L354,208 L146,208 Z" fill="#3b82f6"/>
     <text class="lyr" x="250" y="195" text-anchor="middle">Reverse proxy cache</text>
-    <text class="m" x="560" y="195">1–5 ms</text>
-    <text class="m" x="720" y="195">GB</text>
-    <text class="m" x="836" y="195">shared responses, s-maxage</text>
+    <text class="m" x="410" y="195">1–5 ms</text>
+    <text class="m" x="560" y="195">GB</text>
+    <text class="m" x="680" y="195">shared responses, s-maxage</text>
   </g>
   <g>
     <path d="M146,212 L354,212 L362,248 L138,248 Z" fill="#0891b2"/>
     <text class="lyr" x="250" y="235" text-anchor="middle">In-process cache (L1)</text>
-    <text class="m" x="560" y="235">~100 ns</text>
-    <text class="m" x="720" y="235">100 MB–1 GB</text>
-    <text class="m" x="836" y="235">hot keys, config, 1–5 s TTL</text>
+    <text class="m" x="410" y="235">~100 ns</text>
+    <text class="m" x="560" y="235">100 MB–1 GB</text>
+    <text class="m" x="680" y="235">hot keys, config, 1–5 s TTL</text>
   </g>
   <g>
     <path d="M138,252 L362,252 L370,288 L130,288 Z" fill="#059669"/>
     <text class="lyr" x="250" y="275" text-anchor="middle">Distributed cache (Redis)</text>
-    <text class="m" x="560" y="275">0.5–2 ms</text>
-    <text class="m" x="720" y="275">10 GB–TB</text>
-    <text class="m" x="836" y="275">shared hot set, sessions</text>
+    <text class="m" x="410" y="275">0.5–2 ms</text>
+    <text class="m" x="560" y="275">10 GB–TB</text>
+    <text class="m" x="680" y="275">shared hot set, sessions</text>
   </g>
   <g>
     <path d="M130,292 L370,292 L378,328 L122,328 Z" fill="#d97706"/>
     <text class="lyr" x="250" y="315" text-anchor="middle">DB buffer pool</text>
-    <text class="m" x="560" y="315">~1 ms</text>
-    <text class="m" x="720" y="315">GB–100s GB</text>
-    <text class="m" x="836" y="315">recently touched pages</text>
+    <text class="m" x="410" y="315">~1 ms</text>
+    <text class="m" x="560" y="315">GB–100s GB</text>
+    <text class="m" x="680" y="315">recently touched pages</text>
   </g>
   <g>
     <path d="M122,332 L378,332 L378,368 L122,368 Z" fill="#b91c1c"/>
     <text class="lyr" x="250" y="355" text-anchor="middle">Disk / object storage</text>
-    <text class="m" x="560" y="355">0.1–10 ms</text>
-    <text class="m" x="720" y="355">unbounded</text>
-    <text class="m" x="836" y="355">source of truth</text>
+    <text class="m" x="410" y="355">0.1–10 ms</text>
+    <text class="m" x="560" y="355">unbounded</text>
+    <text class="m" x="680" y="355">source of truth</text>
   </g>
 
   <!-- side arrow -->

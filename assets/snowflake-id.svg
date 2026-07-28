@@ -51,12 +51,12 @@
   <rect x="24" y="198" width="418" height="88" rx="8" fill="#fef2f2" stroke="#fca5a5"/>
   <text class="hd" x="40" y="220">Caveats an interviewer will probe</text>
   <text class="b" x="40" y="240">• <tspan font-weight="700">Clock moving backwards</tspan> (NTP correction) → duplicate IDs.</text>
-  <text class="b" x="52" y="256">Fix: refuse to issue until the clock catches up, or use a logical clock.</text>
-  <text class="b" x="40" y="274">• <tspan font-weight="700">Leaks information</tspan> — creation time and issuance rate are public.</text>
+  <text class="b" x="52" y="256">Fix: refuse to issue until the clock catches up.</text>
+  <text class="b" x="40" y="274">• <tspan font-weight="700">Leaks information</tspan> — creation time and rate are public.</text>
 
   <rect x="458" y="198" width="418" height="88" rx="8" fill="#f0fdf4" stroke="#86efac"/>
   <text class="hd" x="474" y="220">Alternatives, and when</text>
-  <text class="b" x="474" y="240">• <tspan font-weight="700">UUIDv7 / ULID</tspan> — same properties, no machine-id assignment, 128 bits.</text>
-  <text class="b" x="474" y="258">• <tspan font-weight="700">DB ticket server with ranges</tspan> — simplest when you already have a DB.</text>
-  <text class="b" x="474" y="276">• <tspan font-weight="700">UUIDv4</tspan> — unique but random → destroys B-tree insert locality. Avoid as a PK.</text>
+  <text class="b" x="474" y="240">• <tspan font-weight="700">UUIDv7 / ULID</tspan> — same properties, no node-id setup, 128 bits.</text>
+  <text class="b" x="474" y="258">• <tspan font-weight="700">DB ticket server with ranges</tspan> — simplest if you have a DB.</text>
+  <text class="b" x="474" y="276">• <tspan font-weight="700">UUIDv4</tspan> — random → destroys B-tree locality. Avoid as a PK.</text>
 </svg>

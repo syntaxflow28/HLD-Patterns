@@ -41,12 +41,12 @@
   <rect x="156" y="180" width="120" height="30" rx="5" fill="#dc2626"/>
   <text class="n" x="216" y="199" text-anchor="middle">empty → 429</text>
 
-  <text class="b" x="292" y="130" font-weight="700">B controls burst</text>
+  <text class="b" x="292" y="130" font-weight="700">B controls burst size</text>
   <text class="b" x="292" y="146">r controls sustained rate</text>
-  <text class="sm" x="292" y="168">A client idle for a minute can</text>
-  <text class="sm" x="292" y="182">immediately spend 100 requests —</text>
-  <text class="sm" x="292" y="196">usually exactly what you want.</text>
-  <text class="sm" x="292" y="212">Leaky bucket = same, but smooths output.</text>
+  <text class="sm" x="292" y="168">Idle clients accumulate</text>
+  <text class="sm" x="292" y="182">tokens, so they can burst —</text>
+  <text class="sm" x="292" y="196">usually what you want.</text>
+  <text class="sm" x="292" y="212">Leaky bucket: smooths output.</text>
 
   <!-- FIXED WINDOW PROBLEM -->
   <rect x="458" y="72" width="418" height="150" rx="10" fill="#fef2f2" stroke="#fca5a5"/>
@@ -85,6 +85,7 @@
     <text x="640" y="330" fill="#15803d">burst-aware</text><text x="710" y="330" fill="#15803d">O(1) memory</text>
   </g>
 
-  <rect x="24" y="360" width="852" height="30" rx="6" fill="#fef3c7" stroke="#fcd34d"/>
-  <text class="b" x="40" y="379"><tspan font-weight="700">Distributed:</tspan> a Redis Lua script makes check-and-decrement atomic. Hybrid is best — each node leases a slice of the global budget and enforces locally, so Redis is off the hot path. Decide the failure mode up front: <tspan font-weight="700">fail open</tspan> for availability, <tspan font-weight="700">fail closed</tspan> for abuse-critical endpoints.</text>
+  <rect x="24" y="352" width="852" height="40" rx="6" fill="#fef3c7" stroke="#fcd34d"/>
+  <text class="b" x="40" y="370"><tspan font-weight="700">Distributed:</tspan> a Redis Lua script makes check-and-decrement atomic. Better still, each node leases a slice of the global budget.</text>
+  <text class="b" x="40" y="386"><tspan font-weight="700">Decide the failure mode up front:</tspan> fail open for availability, fail closed for abuse-critical endpoints.</text>
 </svg>

@@ -80,7 +80,7 @@
   <rect x="44" y="292" width="240" height="22" rx="3" fill="#c7d2fe"/><text class="off" x="52" y="307">P0 · user_1, user_1, user_1 …</text>
   <rect x="296" y="292" width="240" height="22" rx="3" fill="#bfdbfe"/><text class="off" x="304" y="307">P1 · user_2, user_2 …</text>
   <rect x="548" y="292" width="240" height="22" rx="3" fill="#a5f3fc"/><text class="off" x="556" y="307">P2 · user_3, user_3 …</text>
-  <text class="sm" x="800" y="307">↑ max parallelism = partition count</text>
+  <text class="sm" x="856" y="325" text-anchor="end">↑ max parallelism = partition count</text>
 
   <rect x="24" y="342" width="852" height="46" rx="8" fill="#fef3c7" stroke="#fcd34d"/>
   <text class="b" x="40" y="362" font-weight="700">Pick the log when:</text>

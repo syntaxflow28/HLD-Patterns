@@ -11,7 +11,7 @@
   </style>
   <rect width="900" height="420" fill="#fbfcfd"/>
   <text class="ttl" x="24" y="32">Fan-out: push vs pull vs hybrid — and why celebrities force the answer</text>
-  <text class="sub" x="24" y="52">Applies to feeds, notifications, group chat, and activity streams. Decide with four inputs: read:write ratio, follower distribution, active-user fraction, freshness budget.</text>
+  <text class="sub" x="24" y="52">Applies to feeds, notifications, group chat and activity streams — decided by read:write ratio, follower skew and freshness needs.</text>
 
   <!-- PUSH -->
   <rect x="24" y="72" width="276" height="230" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
@@ -73,8 +73,8 @@
   <rect x="620" y="222" width="236" height="24" rx="5" fill="#d97706"/>
   <text class="n" x="738" y="238" text-anchor="middle">merge · dedup · sort by time-sortable ID</text>
 
-  <text class="b" x="620" y="266">Threshold ≈ 100 K followers. Both costs stay bounded:</text>
-  <text class="b" x="620" y="282">writes never explode, reads touch only a handful of celebs.</text>
+  <text class="b" x="620" y="266">Threshold ≈ 100 K followers. Both costs stay</text>
+  <text class="b" x="620" y="282">bounded — no write explosion, few celeb reads.</text>
 
   <!-- the celebrity problem -->
   <rect x="24" y="316" width="418" height="92" rx="10" fill="#fef2f2" stroke="#fca5a5"/>
@@ -85,7 +85,7 @@
 
   <rect x="458" y="316" width="418" height="92" rx="10" fill="#f0fdf4" stroke="#86efac"/>
   <text class="hd" x="478" y="338" fill="#14532d">Optimizations that actually move the needle</text>
-  <text class="b" x="478" y="358">• <tspan font-weight="700">Fan out to active users only</tspan> (30-day login) — typically cuts 60–80% of writes.</text>
+  <text class="b" x="478" y="358">• <tspan font-weight="700">Fan out to active users only</tspan> — cuts 60–80% of writes.</text>
   <text class="b" x="478" y="376">• <tspan font-weight="700">Cap timelines at ~800 IDs</tspan>; deeper pages fall back to the pull path.</text>
   <text class="b" x="478" y="394">• <tspan font-weight="700">Store IDs, not content</tspan> — ~400× less memory, and content is shared.</text>
 </svg>

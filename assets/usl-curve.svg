@@ -60,5 +60,5 @@
   <text class="note" x="662" y="284" font-style="italic">Fix: SHARD so nodes own</text>
   <text class="note" x="662" y="300" font-style="italic">disjoint state and never talk.</text>
 
-  <text class="note" x="24" y="350">This is the real argument for partitioning over “just add replicas of shared state” — and for why a 5-node etcd cluster is not faster than a 3-node one.</text>
+  <text class="note" x="24" y="350">The real argument for partitioning over “just add replicas of shared state” — and why a 5-node etcd cluster is not faster than a 3-node one.</text>
 </svg>

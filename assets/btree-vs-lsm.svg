@@ -39,8 +39,8 @@
   <text class="lb" x="233" y="262" text-anchor="middle">leaf pages on disk — fixed location per key</text>
 
   <rect x="44" y="272" width="378" height="46" rx="6" fill="#dbeafe"/>
-  <text class="b" x="58" y="290">WRITE: seek to the page, modify it, write it back → <tspan font-weight="700">random I/O</tspan></text>
-  <text class="b" x="58" y="308">READ: O(log n) pointer hops, one page fetch → <tspan font-weight="700">predictable, low read amplification</tspan></text>
+  <text class="b" x="58" y="290">WRITE: seek to page, modify, write back → <tspan font-weight="700">random I/O</tspan></text>
+  <text class="b" x="58" y="308">READ: O(log n) hops → <tspan font-weight="700">low, predictable</tspan></text>
 
   <!-- LSM -->
   <rect x="458" y="72" width="418" height="256" rx="10" fill="#f0fdf4" stroke="#86efac"/>
@@ -66,15 +66,15 @@
   <rect x="666" y="230" width="192" height="22" rx="3" fill="#166534"/><text class="n" x="762" y="245" text-anchor="middle">SST L2 (larger, older)</text>
 
   <rect x="478" y="266" width="378" height="52" rx="6" fill="#dcfce7"/>
-  <text class="b" x="492" y="284">WRITE: append to memtable + WAL → <tspan font-weight="700">sequential I/O, very high throughput</tspan></text>
-  <text class="b" x="492" y="302">READ: may check memtable + several SSTs → <tspan font-weight="700">higher read amplification</tspan></text>
-  <text class="sm" x="492" y="316">Bloom filters make “key definitely not in this SST” an O(1) skip — that is why they are everywhere in LSM engines.</text>
+  <text class="b" x="492" y="284">WRITE: append to memtable + WAL → <tspan font-weight="700">sequential, fast</tspan></text>
+  <text class="b" x="492" y="302">READ: memtable + several SSTs → <tspan font-weight="700">read amplification</tspan></text>
+  <text class="sm" x="492" y="316">Bloom filters make “not in this SST” an O(1) skip.</text>
 
   <!-- comparison strip -->
   <rect x="24" y="342" width="852" height="62" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
   <g class="b">
     <text x="40" y="362" font-weight="700">Write amplification</text><text x="200" y="362">B-Tree: lower, but random</text><text x="430" y="362">LSM: higher (compaction), but sequential → wins on throughput</text>
     <text x="40" y="380" font-weight="700">Read amplification</text><text x="200" y="380">B-Tree: low, predictable</text><text x="430" y="380">LSM: higher; mitigated by Bloom filters and compaction</text>
-    <text x="40" y="398" font-weight="700">Watch out for</text><text x="200" y="398">B-Tree: page fragmentation</text><text x="430" y="398">LSM: compaction stalls, tombstone build-up, read latency spikes during compaction</text>
+    <text x="40" y="398" font-weight="700">Watch out for</text><text x="200" y="398">B-Tree: page fragmentation</text><text x="430" y="398">LSM: compaction stalls, tombstone build-up, latency spikes</text>
   </g>
 </svg>

@@ -35,7 +35,7 @@
   <rect x="290" y="104" width="26" height="16" rx="3" fill="#16a34a"/>
   <rect x="510" y="104" width="26" height="16" rx="3" fill="#16a34a"/>
   <rect x="730" y="104" width="26" height="16" rx="3" fill="#16a34a"/>
-  <text class="lg" x="864" y="117">7 requests, 4 empty · up to 2 s stale</text>
+  <text class="lg" x="180" y="138">7 requests, 4 empty · up to 2 s stale</text>
 
   <!-- LONG POLLING -->
   <text class="hd" x="24" y="166">Long polling</text>
@@ -48,7 +48,7 @@
   <rect x="484" y="164" width="216" height="16" rx="3" fill="#cbd5e1"/>
   <rect x="700" y="164" width="10" height="16" rx="3" fill="#16a34a"/>
   <rect x="714" y="164" width="146" height="16" rx="3" fill="#cbd5e1"/>
-  <text class="lg" x="864" y="177">3 requests, 0 empty · near-instant · a held thread/conn per client</text>
+  <text class="lg" x="180" y="198">3 requests, 0 empty · near-instant · a held thread/conn per client</text>
 
   <!-- SSE -->
   <text class="hd" x="24" y="226">SSE</text>
@@ -59,7 +59,7 @@
     <rect x="290" y="222" width="8" height="20" rx="2"/><rect x="470" y="222" width="8" height="20" rx="2"/>
     <rect x="700" y="222" width="8" height="20" rx="2"/>
   </g>
-  <text class="lg" x="864" y="237">1 connection · auto-reconnect + Last-Event-ID · plain HTTP · one-way only</text>
+  <text class="lg" x="180" y="258">1 connection · auto-reconnect + Last-Event-ID · plain HTTP · one-way only</text>
 
   <!-- WEBSOCKET -->
   <text class="hd" x="24" y="286">WebSocket</text>
@@ -74,7 +74,7 @@
     <rect x="360" y="282" width="8" height="20" rx="2"/><rect x="560" y="282" width="8" height="20" rx="2"/>
     <rect x="790" y="282" width="8" height="20" rx="2"/>
   </g>
-  <text class="lg" x="864" y="297">1 connection · sub-100 ms both directions · you now operate a stateful tier</text>
+  <text class="lg" x="180" y="316">1 connection · sub-100 ms both directions · you now operate a stateful tier</text>
 
   <!-- time axis -->
   <line x1="180" y1="326" x2="860" y2="326" stroke="#cbd5e1"/>

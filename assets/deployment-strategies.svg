@@ -49,7 +49,7 @@
   <text class="b" x="712" y="124">One DNS/LB switch</text>
   <text class="b" x="712" y="142">= instant cutover</text>
   <text class="b" x="712" y="160">and instant rollback.</text>
-  <text class="sm" x="478" y="192">Hard part: the database. Both colours share it, so migrations must still be expand/contract.</text>
+  <text class="sm" x="478" y="192">Hard part: the DB is shared, so migrations must still be expand/contract.</text>
 
   <!-- CANARY -->
   <rect x="24" y="216" width="418" height="146" rx="10" fill="#f0fdf4" stroke="#86efac"/>
@@ -78,5 +78,5 @@
   <text class="b" x="478" y="298">• Ship dark, release later — decouples the risky moment from the deploy.</text>
   <text class="b" x="478" y="316">• Kill switch takes <tspan font-weight="700">seconds</tspan>, no rebuild, no rollback pipeline.</text>
   <text class="b" x="478" y="334">• Enables trunk-based development and long-running migrations.</text>
-  <text class="sm" x="478" y="352">Cost: flag debt. Every flag needs an owner and an expiry date, or you get untestable combinatorics.</text>
+  <text class="sm" x="478" y="352">Cost: flag debt. Every flag needs an owner and an expiry date.</text>
 </svg>

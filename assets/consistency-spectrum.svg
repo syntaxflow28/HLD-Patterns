@@ -63,5 +63,5 @@
   </g>
 
   <rect x="40" y="264" width="820" height="26" rx="6" fill="#fef3c7" stroke="#fcd34d"/>
-  <text class="g" x="54" y="282">The cheap trick most candidates miss: you usually only need strong consistency <tspan font-weight="700">for the person who wrote the data</tspan>. Read-your-writes for the author + eventual for everyone else costs almost nothing.</text>
+  <text class="g" x="54" y="282">The trick most candidates miss: you usually only need strong consistency <tspan font-weight="700">for the person who wrote the data</tspan>.</text>
 </svg>

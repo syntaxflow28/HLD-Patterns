@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" width="900" height="380" role="img" aria-label="Geospatial indexing approaches: geohash grid, quadtree and H3 hexagons">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" width="900" height="420" role="img" aria-label="Geospatial indexing approaches: geohash grid, quadtree and H3 hexagons">
   <style>
     text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
     .ttl{font-size:18px;font-weight:700;fill:#0f172a}
@@ -8,12 +8,12 @@
     .sm{font-size:10px;fill:#64748b}
     .cell{font-size:9px;fill:#94a3b8}
   </style>
-  <rect width="900" height="380" fill="#fbfcfd"/>
+  <rect width="900" height="420" fill="#fbfcfd"/>
   <text class="ttl" x="24" y="32">“Find everything within 5 km” — three ways to index space</text>
   <text class="sub" x="24" y="52">A 2-D range query has no good B-tree answer. All three approaches do the same trick: turn 2-D into a 1-D sortable key.</text>
 
   <!-- GEOHASH -->
-  <rect x="24" y="72" width="276" height="240" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <rect x="24" y="72" width="276" height="272" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
   <text class="hd" x="44" y="96">Geohash — recursive grid</text>
   <g stroke="#93c5fd" fill="none">
     <rect x="60" y="110" width="200" height="140"/>
@@ -29,12 +29,13 @@
     <rect x="60" y="145" width="50" height="35"/><rect x="160" y="145" width="50" height="35"/>
     <rect x="60" y="180" width="50" height="35"/><rect x="110" y="180" width="50" height="35"/><rect x="160" y="180" width="50" height="35"/>
   </g>
-  <text class="b" x="44" y="272">Shared prefix = spatial proximity, so a plain</text>
-  <text class="b" x="44" y="288">string index works in <tspan font-weight="700">any</tspan> database.</text>
-  <text class="sm" x="44" y="304">Trap: neighbours can differ at the first char → query the 9 surrounding cells.</text>
+  <text class="b" x="44" y="270">Shared prefix = spatial proximity, so</text>
+  <text class="b" x="44" y="286">a plain string index works in <tspan font-weight="700">any</tspan> DB.</text>
+  <text class="sm" x="44" y="308">Trap: neighbours can differ at the first</text>
+  <text class="sm" x="44" y="324">char → query the 9 surrounding cells.</text>
 
   <!-- QUADTREE -->
-  <rect x="312" y="72" width="276" height="240" rx="10" fill="#f0fdf4" stroke="#86efac"/>
+  <rect x="312" y="72" width="276" height="272" rx="10" fill="#f0fdf4" stroke="#86efac"/>
   <text class="hd" x="332" y="96">Quadtree — splits by density</text>
   <g stroke="#86efac" fill="none">
     <rect x="348" y="110" width="200" height="140"/>
@@ -49,12 +50,14 @@
   </g>
   <text class="sm" x="366" y="198" fill="#15803d">dense → deep</text>
   <text class="sm" x="480" y="238" fill="#15803d">sparse → shallow</text>
-  <text class="b" x="332" y="272">Each leaf holds at most N points, so a cell in</text>
-  <text class="b" x="332" y="288">Manhattan is tiny and one in Wyoming is huge.</text>
-  <text class="sm" x="332" y="304">Trap: it is a tree in memory — rebalancing on rapid movement is expensive.</text>
+  <text class="b" x="332" y="270">Each leaf holds at most N points, so</text>
+  <text class="b" x="332" y="286">a dense city cell is tiny and a rural</text>
+  <text class="b" x="332" y="302">one is huge.</text>
+  <text class="sm" x="332" y="324">Trap: a tree in memory — rebalancing</text>
+  <text class="sm" x="332" y="338">on rapid movement is expensive.</text>
 
   <!-- H3 -->
-  <rect x="600" y="72" width="276" height="240" rx="10" fill="#faf5ff" stroke="#d8b4fe"/>
+  <rect x="600" y="72" width="276" height="272" rx="10" fill="#faf5ff" stroke="#d8b4fe"/>
   <text class="hd" x="620" y="96">S2 / H3 — hex cells</text>
   <g fill="#f3e8ff" stroke="#a855f7">
     <polygon points="700,120 718,130 718,150 700,160 682,150 682,130"/>
@@ -71,12 +74,14 @@
   <polygon points="736,150 754,160 754,180 736,190 718,180 718,160" fill="#a855f7" fill-opacity="0.45" stroke="#7c3aed" stroke-width="2"/>
   <circle cx="736" cy="170" r="4" fill="#dc2626"/>
   <text class="sm" x="736" y="240" text-anchor="middle" fill="#6b21a8">every neighbour is equidistant</text>
-  <text class="b" x="620" y="272">Hexagons have 6 equal-distance neighbours;</text>
-  <text class="b" x="620" y="288">squares have 4 near + 4 far. Cleaner ring queries.</text>
-  <text class="sm" x="620" y="304">Production standard at Uber/Lyft for supply-demand aggregation and dispatch.</text>
+  <text class="b" x="620" y="270">Hexagons have 6 equidistant</text>
+  <text class="b" x="620" y="286">neighbours; squares have 4 near +</text>
+  <text class="b" x="620" y="302">4 far. Cleaner ring queries.</text>
+  <text class="sm" x="620" y="324">Production standard at Uber and Lyft</text>
+  <text class="sm" x="620" y="338">for supply-demand and dispatch.</text>
 
   <!-- bottom -->
-  <rect x="24" y="326" width="852" height="42" rx="8" fill="#f1f5f9" stroke="#e2e8f0"/>
-  <text class="b" x="40" y="344"><tspan font-weight="700">Pragmatic picks:</tspan> already on Postgres → <tspan font-weight="700">PostGIS + GiST</tspan>. Ephemeral moving objects (drivers) → <tspan font-weight="700">Redis GEOADD/GEOSEARCH</tspan>. Massive scale + analytics → <tspan font-weight="700">H3/S2 cell id as a partition key</tspan>.</text>
-  <text class="b" x="40" y="360"><tspan font-weight="700">Split hot from cold:</tspan> current locations belong in memory with a short TTL; location <tspan font-style="italic">history</tspan> belongs in a columnar or time-series store. Never the same table.</text>
+  <rect x="24" y="358" width="852" height="46" rx="8" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text class="b" x="40" y="378"><tspan font-weight="700">Pragmatic picks:</tspan> on Postgres → <tspan font-weight="700">PostGIS + GiST</tspan>. Moving objects → <tspan font-weight="700">Redis GEOSEARCH</tspan>. Massive scale → <tspan font-weight="700">H3/S2 cell id as a partition key</tspan>.</text>
+  <text class="b" x="40" y="394"><tspan font-weight="700">Split hot from cold:</tspan> current locations live in memory with a short TTL; location <tspan font-style="italic">history</tspan> lives in a columnar or time-series store.</text>
 </svg>

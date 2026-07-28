@@ -68,5 +68,5 @@
   </g>
 
   <rect x="24" y="360" width="852" height="28" rx="6" fill="#fef3c7" stroke="#fcd34d"/>
-  <text class="note" x="38" y="378">Design consequence: a network hop to a cache (0.5 ms) beats a local disk seek (10 ms) — this is why distributed caches exist. Cross-continent latency is physics; only a CDN or a regional deployment fixes it.</text>
+  <text class="note" x="38" y="378">Design consequence: a network hop to cache (0.5 ms) beats a local disk seek (10 ms). Cross-continent latency is physics — only a CDN fixes it.</text>
 </svg>

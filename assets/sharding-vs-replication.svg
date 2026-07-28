@@ -37,7 +37,7 @@
   <text class="n" x="341" y="249" text-anchor="middle">rows 1…1000</text>
 
   <text class="b" x="44" y="286">✔ Any replica can answer a read → read QPS scales</text>
-  <text class="b" x="44" y="304">✘ Write throughput does NOT scale — one leader still takes every write</text>
+  <text class="b" x="44" y="304">✘ Write throughput does NOT scale — one leader takes all writes</text>
   <text class="b" x="44" y="322">✘ Introduces replication lag → stale reads</text>
 
   <!-- RIGHT: partitioning -->
@@ -67,9 +67,9 @@
   <text class="n" x="818" y="234" text-anchor="middle">SHARD 4</text>
   <text class="n" x="818" y="249" text-anchor="middle">751…1000</text>
 
-  <text class="b" x="472" y="286">✔ Write throughput and storage scale linearly with shards</text>
-  <text class="b" x="472" y="304">✘ Cross-shard queries become scatter-gather; the slowest shard sets latency</text>
-  <text class="b" x="472" y="322">✘ Each shard is now a single point of failure — so you replicate each shard too</text>
+  <text class="b" x="472" y="286">✔ Write throughput and storage scale with shards</text>
+  <text class="b" x="472" y="304">✘ Cross-shard queries = scatter-gather; slowest shard wins</text>
+  <text class="b" x="472" y="322">✘ Each shard is a new SPOF — so you replicate every shard</text>
 
   <text class="sub" x="450" y="354" text-anchor="middle">Production answer: “N shards, each a 3-node replica set.” Say both words, never one as a substitute for the other.</text>
 </svg>
