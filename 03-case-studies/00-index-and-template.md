@@ -9,20 +9,24 @@
 | [01](01-url-shortener.md) | URL shortener | KV / ID mapping | ID generation, read-heavy caching, analytics |
 | [02](02-news-feed.md) | News feed / Twitter timeline | Fan-out | Push vs pull, celebrity problem, precomputation |
 | [03](03-chat-messaging.md) | Chat / messaging | Real-time | WebSockets, delivery guarantees, ordering, presence |
+| [04](04-rate-limiter.md) | Distributed rate limiter | Metering | Token bucket, approximate distributed counting, fail-open |
+| [05](05-ride-hailing.md) | Ride-hailing (Uber) | Geospatial | H3 index, write-heavy location, batched matching, CAS leases |
+| [06](06-ticket-booking.md) | Ticket booking (Ticketmaster) | Transactional | Waiting room, hold + TTL, hot partition, CP over AP |
+| [07](07-video-streaming.md) | Video streaming (YouTube) | Media pipeline | Chunked transcoding, ABR, multi-CDN, cost per GB |
+| [08](08-file-sync-storage.md) | File sync (Dropbox) | Media + sync | Content-addressed blocks, delta sync, conflict resolution |
+| [09](09-notification-system.md) | Notification system | Fan-out | Channel isolation, dedup, provider failover, campaigns |
+| [10](10-payment-system.md) | Payment system & ledger | Transactional | Idempotency, double-entry ledger, sagas, reconciliation |
+
+Read them in any order, but **01 → 02 → 03** first: they cover the three archetypes
+that appear most often as the *base* of a question. After that, pick by whichever
+archetype you feel weakest in.
 
 ## Practise these next (same template)
 
 | Problem | Archetype | Key challenge to nail |
 |---|---|---|
-| Rate limiter | Metering | Token bucket, distributed counters, fail-open |
 | Web crawler | Pipeline | Frontier queue, politeness, dedup, traps |
 | Distributed cache | Storage | Consistent hashing, eviction, replication |
-| YouTube / Netflix | Media | Transcoding pipeline, ABR, CDN economics |
-| Google Drive / Dropbox | Media + sync | Chunking, dedup, delta sync, conflict resolution |
-| Uber / Lyft | Geospatial | Geo index, matching, surge, trip state machine |
-| Ticketmaster | Transactional | Reservation TTL, waiting room, thundering herd |
-| Payment system | Transactional | Idempotency, ledger, reconciliation, PSP webhooks |
-| Notification system | Fan-out | Multi-channel, preferences, retries, dedup |
 | Google Docs | Real-time | OT vs CRDT, presence, snapshots |
 | Search autocomplete | Search | Precomputed top-k, trie, edge caching |
 | Ad click aggregation | Metering | Stream processing, exactly-once effect, late events |
@@ -30,8 +34,12 @@
 | Instagram / photo sharing | Media + feed | Blob pipeline, feed, discovery |
 | Leaderboard | Metering | Redis sorted sets, sharded ranking, ties |
 | Distributed job scheduler | Coordination | At-least-once execution, leases, time buckets |
-| Yelp / proximity service | Geospatial | Geohash/quadtree, static vs dynamic data |
+| Yelp / proximity service | Geospatial | Static geo data vs the dynamic case in [05](05-ride-hailing.md) |
 | Key-value store | Storage | Quorum, gossip, Merkle trees, hinted handoff |
+| Stock exchange / order book | Transactional | Deterministic matching, sequencing, low latency |
+
+Most of these are recombinations of the ten worked studies. Before designing one from
+scratch, ask *"which worked study is this closest to, and what is genuinely different?"*
 
 ---
 

@@ -61,9 +61,16 @@ flowchart LR
 
 ### 03 — Case Studies
 - [00 Index & reusable template](03-case-studies/00-index-and-template.md)
-- [01 URL shortener](03-case-studies/01-url-shortener.md)
-- [02 News feed](03-case-studies/02-news-feed.md)
-- [03 Chat / messaging](03-case-studies/03-chat-messaging.md)
+- [01 URL shortener](03-case-studies/01-url-shortener.md) — KV / ID mapping
+- [02 News feed](03-case-studies/02-news-feed.md) — fan-out
+- [03 Chat / messaging](03-case-studies/03-chat-messaging.md) — real-time
+- [04 Distributed rate limiter](03-case-studies/04-rate-limiter.md) — metering
+- [05 Ride-hailing (Uber)](03-case-studies/05-ride-hailing.md) — geospatial
+- [06 Ticket booking (Ticketmaster)](03-case-studies/06-ticket-booking.md) — contention
+- [07 Video streaming (YouTube)](03-case-studies/07-video-streaming.md) — media pipeline
+- [08 File sync (Dropbox)](03-case-studies/08-file-sync-storage.md) — sync & conflicts
+- [09 Notification system](03-case-studies/09-notification-system.md) — multi-channel fan-out
+- [10 Payment system & ledger](03-case-studies/10-payment-system.md) — transactional correctness
 
 ### 04 — Cheatsheets
 - [01 Latency & capacity numbers](04-cheatsheets/01-numbers-and-estimation.md)
@@ -86,4 +93,4 @@ flowchart LR
 |---|---|
 | 1 | Playbook + Core concepts 01–06. Do estimation drills daily. |
 | 2 | Core concepts 07–12 + Patterns folder. Draw each diagram from memory. |
-| 3 | 1 case study per day, timed at 45 min, out loud. Review cheatsheets before each. |
+| 3 | 1 case study per day (there are 10), timed at 45 min, out loud. Review cheatsheets before each. |

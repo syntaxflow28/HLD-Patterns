@@ -141,7 +141,7 @@ hydrate content from the post cache → return.
 
 ```mermaid
 flowchart TD
-    P{Author posts} --> F{follower_count > 100K?}
+    P{Author posts} --> F{"follower_count > 100K?"}
     F -->|no| PUSH["PUSH: write post_id into<br/>each follower's timeline<br/>Read = O(1)"]
     F -->|yes| NOPUSH["NO PUSH: store in a<br/>celebrity posts list"]
     R{Reader opens feed} --> RD1[Read own precomputed timeline]

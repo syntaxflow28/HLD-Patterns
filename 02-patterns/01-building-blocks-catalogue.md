@@ -97,7 +97,7 @@ flowchart LR
     DQ --> EXEC[Executor pool]
     TB --> EXEC
     EXEC --> IDEM[Idempotent execution + lease]
-    EXEC -->|failure| RETRY[Retry with backoff -> DLQ]
+    EXEC -->|failure| RETRY["Retry with backoff -> DLQ"]
 ```
 Cover: at-least-once execution → idempotency; leases so two workers don't run the same
 job; clock skew; thundering herd at round times (jitter the schedule); and cancellation.

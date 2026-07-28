@@ -148,7 +148,7 @@ flowchart LR
 
     KQ --> AGG["Stream aggregation<br/>windowed counts + HLL uniques"]
     AGG --> STATS[(click_stats)]
-    KQ --> LAKE[(Data lake -> warehouse)]
+    KQ --> LAKE[("Data lake -> warehouse")]
     STATS --> SAPI[Stats API]
 ```
 
