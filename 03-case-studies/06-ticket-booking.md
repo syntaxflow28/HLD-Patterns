@@ -306,3 +306,22 @@ process".
 | Sharding | By `event_id` | By `user_id` | Keeps every booking transaction single-shard |
 | Payment coupling | Saga: authorise → confirm → capture | One distributed transaction | External systems can't join your transaction |
 | CAP stance | **CP** for inventory | AP | Double-selling is worse than a short outage |
+
+---
+
+## 12. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "Why not `SELECT ... FOR UPDATE` while the user pays?" | Payment takes 30 s to 3 minutes. Holding a database transaction open that long exhausts connections and locks — it will take the database down under load |
+| "Why not a Redis distributed lock per seat?" | Locks aren't durable. A failover or split-brain loses the lock and you sell the seat twice. The hold must be a durable row |
+| "The seat map is stale — isn't that a bug?" | It's a deliberate trade. 600 K reads/s on one object can't be real-time. The map is advisory; the authoritative answer is the hold attempt, which returns a clean `409` |
+| "Why a waiting room instead of autoscaling?" | 2 M arrivals in 10 s cannot be autoscaled into — instances take minutes to warm and the database is the real constraint. You must meter arrivals, not chase them |
+| "Can users skip the queue by calling the API directly?" | The booking API requires a signed, short-lived token scoped to that event, issued only on admission. They will try this, so it must be enforced server-side |
+| "The hold sweeper job stops running." | Nothing breaks. Expiry is lazy — the next writer's `WHERE` clause reclaims expired holds. The sweeper only reclaims storage; correctness never depends on a cron job |
+| "One mega-event makes a single hot shard." | Accept it and isolate it: dedicated shard and capacity for big events, pre-warmed caches, tighter admission. Isolate the elephant so it can't trample the mice |
+| "General admission — no assigned seats?" | Different problem: one counter, not N rows. Split inventory into K buckets of `capacity/K`, route randomly, rebalance as buckets empty. Approximate but vastly more scalable |
+| "Payment succeeded but the hold expired." | Compensate: void the authorisation. That's why you **authorise** first and **capture** only after seats are confirmed — the saga's compensating action is cheap |
+| "Confirm succeeded but the response was lost." | The client retries with the same `Idempotency-Key` and gets the original booking back. The key and response are written in the same transaction as the booking |
+| "Why is this CP when everything else you designed is AP?" | Because the failure modes differ in kind. A stale feed is invisible; a double-sold seat is a refund, a lawsuit, and a headline. Choose per-system, not by habit |
+| "Scalpers hold the whole venue." | Cap holds per user / IP / payment instrument per event, expire holds in 5–10 minutes, and require the queue token. Bot defence (fingerprinting, proof-of-work) is a real part of this business |

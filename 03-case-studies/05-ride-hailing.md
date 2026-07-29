@@ -286,3 +286,22 @@ distance ranking. If the surge service is down, use the last published multiplie
 | Driver reservation | CAS + TTL lease | Distributed lock | No double-booking, and self-heals when a phone dies |
 | Trip state | Event-sourced state machine | Mutable row only | Auditability for billing, support, and regulators |
 | Consistency | Strong for driver assignment, eventual everywhere else | Strong everywhere | Only one invariant genuinely needs it |
+
+---
+
+## 11. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "Why H3 rather than geohash?" | Geohash has the boundary problem — adjacent points can share no prefix, so you must query 8 neighbour cells and cell sizes distort with latitude. H3 cells are uniform with trivially computable neighbours |
+| "Why not PostGIS?" | 250 K location writes/s. A relational spatial index cannot absorb that, and it doesn't need to — the data is obsolete in 4 seconds |
+| "Do you persist every location update?" | Not on the hot path. Current position lives in memory; the raw stream goes to Kafka for history and analytics, entirely off the critical path |
+| "How do you guarantee a driver isn't double-booked?" | Compare-and-swap on driver state (`AVAILABLE → OFFERED`), single-homed per driver. If the CAS fails, pick another driver. This is the one place with strong consistency |
+| "Driver's phone dies mid-offer." | The offer carries a TTL lease. On expiry the driver returns to `AVAILABLE` and the rider re-enters the next matching batch. Never lock without an expiry |
+| "You said geo-sharding is usually wrong — why is it right here?" | Because the query has a natural locality key: a rider in Berlin never needs Tokyo data. That's rare. It also gives per-city failure isolation |
+| "New Year's Eve in one city — hot shard." | Real. Split hot cities into sub-regions and scale the Location Service horizontally within a region. It's cell-based architecture with geography as the cell key |
+| "Why batch matching instead of nearest-driver-first?" | Greedy assignment is globally suboptimal and thrashes when drivers decline. A 2–5 s batch solved as bipartite assignment reduces total wait and empty miles — and the delay is hidden by the 'finding your driver' spinner |
+| "Rank by distance?" | By road **ETA**. A driver 200 m away across a river is useless. Batch the ETA lookups into one matrix call and cache cell-pair ETAs for 30–60 s |
+| "Rider double-taps 'Request'." | `Idempotency-Key` on the request; the Trip API returns the existing trip instead of creating a second one |
+| "Surge changes while the rider is deciding." | The quoted price is locked into the trip record at quote time. Surge itself is an approximate, eventually-consistent signal per cell |
+| "Routing service is down." | Fall back to straight-line ranking and a degraded ETA. Static stability — keep working on stale data rather than failing |

@@ -231,3 +231,20 @@ at redirect time from a small in-memory set; rate limit creation per IP/account.
 | Analytics | Async + approximate (HLL) | Sync exact counters | Never slow down the redirect; exactness isn't required |
 | Cache | Redis + in-process L1 | Redis only | Handles hot keys and reduces network hops |
 | Consistency | Read-your-writes via write-through | Full strong consistency | Mapping is immutable, so eventual is fine elsewhere |
+
+---
+
+## 11. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "Why 302 and not 301?" | A 301 is cached by browsers indefinitely, so you never see the second click — that kills analytics and makes expiry and revocation unenforceable |
+| "Why not just hash the long URL?" | Collisions force a read-before-write on every create, and hashing dedups URLs that need *different* expiry or ownership. Counter ranges avoid both |
+| "Is 7 characters enough?" | 62⁷ ≈ 3.5 trillion. At 100 M/day that is ~95 years. Yes |
+| "Sequential IDs are guessable — so?" | Competitors can enumerate your links and infer your volume. Encrypt the counter (Feistel/skip32) before base62: unique by construction, unguessable |
+| "Redis dies. What happens?" | Redirects fall through to the KV store; p99 goes ~1 ms → 5–10 ms. The KV tier must be provisioned for that fallback burst, or you shed non-critical traffic |
+| "Someone scans random short keys." | Cache penetration — every miss hits the KV store. Negative-cache 404s for ~30 s and put a Bloom filter of existing keys in front |
+| "One link goes viral and melts a Redis shard." | In-process L1 cache with a 1–5 s TTL. With 200 instances that caps Redis at ~40 req/s for that key regardless of traffic |
+| "Do you need transactions anywhere?" | Only for custom aliases (`INSERT ... IF NOT EXISTS`). Generated keys are unique by construction and the mapping is immutable |
+| "How do you make this multi-region active-active?" | The mapping is immutable after creation, so it replicates trivially. The only conflict is custom aliases — route those through one region or a consensus-backed uniqueness check |
+| "Analytics must be exact." | Push back: at 10 B events/day, exact unique counts cost far more than they're worth. HyperLogLog gives ~2% error at a fraction of the cost |

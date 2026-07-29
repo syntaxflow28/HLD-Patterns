@@ -102,6 +102,11 @@ Metrics · SLOs · alerts · deploy · migration
 
 ## 9. Trade-offs summary
 | Decision | Chose | Alternative | Why |
+
+## 10. Rapid-fire probe answers
+| Probe | Answer |
+(write the 8-12 questions an interviewer would push back with, and a one-line
+defence for each — this is the part you actually get graded on)
 ````
 
 ---
@@ -126,3 +131,22 @@ Rules that actually make practice work:
 4. **Keep a miss list.** After each session write down the 3 things you forgot. Review
    it before the next session. It converges fast.
 5. **Defend, don't recite.** Have a friend ask "why not X?" for every choice.
+
+---
+
+## Use the probe tables as a drill
+
+Every worked case study ends with a **Rapid-fire probe answers** table — the follow-up
+questions an interviewer actually asks once your design is on the board. The design
+itself is table stakes; these exchanges are where the grade is decided.
+
+Two ways to use them:
+1. **Cover the answer column** and respond out loud before reading. If you can't answer
+   in about 20 seconds, you don't own that decision yet.
+2. **Reverse it:** read only the answer and reconstruct the question. This trains you to
+   recognise *which* trade-off an interviewer is fishing for when they ask something
+   vaguely.
+
+The pattern behind almost every probe is the same: they name a case your design didn't
+explicitly cover and see whether you reason from your own constraints or start
+improvising a new architecture.

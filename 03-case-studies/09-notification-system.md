@@ -277,3 +277,22 @@ it's both a UX win and a large cost saving on SMS/push volume.
 | Providers | Multi-provider with circuit breakers | Single provider | Providers have outages; also gives cost leverage |
 | Status storage | Wide-column, TTL 30 days, archive after | Relational, retained forever | 5 TB/day; no joins needed; cost |
 | Preferences failure | Fail closed for marketing, open for transactional | One uniform policy | Compliance risk differs sharply by category |
+
+---
+
+## 11. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "A 50 M campaign is running and an OTP needs to go out." | Separate topics and dedicated consumer capacity for transactional traffic. A priority *field* on one shared queue isn't enough — the campaign still occupies the consumers. Isolation beats prioritisation |
+| "Can you guarantee exactly-once delivery?" | Not across a third-party boundary. At-least-once plus a dedup key with TTL gives exactly-once *user-visible effect*, which is the property that actually matters |
+| "What's the difference between your two keys?" | `Idempotency-Key` protects against the **caller** retrying the HTTP request. `dedupKey` protects against **business logic** generating the same notification from two code paths |
+| "The SMS provider goes down." | Circuit breaker opens after N consecutive failures and traffic shifts to the secondary. Classify per-recipient errors (bad number) separately, or you'll fail over for no reason |
+| "Provider recovers after an hour — what happens?" | Without TTLs, an hour of queued notifications floods users at once. Every message carries a TTL; expired ones are dropped, not delivered late |
+| "How do you fan out 50 M in 30 minutes?" | Hierarchical: a coordinator emits chunk tasks (`users 0–10,000`), workers expand each chunk. Checkpointed so a restart doesn't re-send, and pausable so a bad link can be stopped in seconds |
+| "Preferences service is down." | Split policy: fail **closed** for marketing — a wrongly sent message is a compliance problem — and fail **open** for transactional using a cached snapshot |
+| "Why a separate queue per channel?" | Each has different rate limits, latency profiles, retry policies, and failure modes. A backed-up SMS provider must not stall push delivery. Bulkheading |
+| "Delivery rates are slowly declining." | Dead device tokens. Consume APNs/FCM feedback and mark them invalid — otherwise providers start throttling you for sending to uninstalled apps |
+| "User gets 40 'someone liked your post' pushes." | Windowed aggregation keyed by (user, category) collapsing to "40 people liked your post". A UX win and a large cost saving |
+| "A bad template goes out to 10 M people." | Templates are versioned and immutable, campaigns pin a version, and you canary to 1% first. Roll forward by pinning the previous version |
+| "Why is SMS worth optimising?" | 200 M/day at ~$0.005 is $1 M/day. Prefer push when the app is installed, and dedup aggressively. Cost is a design constraint here, not an afterthought |

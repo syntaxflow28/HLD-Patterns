@@ -334,3 +334,23 @@ the right call; showing you choose per-system rather than by habit is the point.
 | Unknown outcomes | Explicit `Unknown` state + status query | Retry or assume failure | Blind retry double-charges; assuming failure loses money |
 | Safety net | Daily reconciliation vs settlement files | Trust the online path | Lets you relax online guarantees safely |
 | CAP stance | **CP** | AP | A wrong balance is worse than a delayed payment |
+
+---
+
+## 12. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "The PSP call times out. Did the customer get charged?" | Unknown — and that's an explicit state. Never blind-retry (double charge) and never assume failure (lost money). Query the PSP by your idempotency key; reconciliation catches anything unresolved |
+| "Client retries with the same idempotency key." | Return the stored original response byte for byte. If the key is reused with a **different** request hash, return `422` — that's a client bug and it must be loud |
+| "Why double-entry instead of a balance column?" | Auditability and reversibility, plus a machine-checkable invariant: debits minus credits must equal zero. A balance column can drift with nothing to detect it |
+| "Why integers rather than decimals?" | Store minor units (cents) as integers. Floating-point money accumulates rounding error, and using floats for currency is an instant red flag |
+| "How do you fix an incorrect ledger entry?" | Post a reversing entry. You never `UPDATE` or delete — history is immutable, and auditors require it |
+| "You write to the DB then publish to Kafka — what if you crash between?" | That's the dual-write problem: the order service never learns the payment succeeded. Insert the event into an `outbox` table in the same transaction and relay it afterwards |
+| "Why aren't you sharding?" | 500 TPS peak. A single ACID primary handles that comfortably, and it buys serialisable transactions across payments and ledger — far more valuable than throughput you don't need |
+| "PSPs retry webhooks aggressively." | Unique constraint on `(psp, psp_event_id)` makes reprocessing a no-op. Webhook volume is ~3x payment volume, so this path must be idempotent by construction |
+| "A 'captured' webhook arrives before 'authorised'." | The state machine only accepts valid transitions. Park the unexpected event and re-drive it once the prerequisite arrives — don't force an invalid transition |
+| "The ledger doesn't balance." | Halt payouts immediately and page. Money correctness outranks availability; continuing to pay out from a known-inconsistent ledger turns a bug into an unrecoverable loss |
+| "Why not a microservice per step with 2PC?" | It trades your strongest asset — one ACID transaction — for coordination complexity you don't need. Use a saga only where an external system is genuinely involved, with explicit compensations |
+| "Reconciliation sounds like a batch job nobody runs." | It's the mechanism that makes at-least-once processing and `Unknown` states *safe*. Using an offline process to relax online guarantees is the core idea, not a chore |
+| "How do you keep PCI scope small?" | Client-side tokenisation or PSP-hosted fields, so raw card numbers go browser → PSP and you only ever store a token. Collapses audit scope from the whole company to almost nothing |

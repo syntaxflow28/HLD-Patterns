@@ -89,7 +89,8 @@ timeline             (Redis: LIST or ZSET per user, capped at ~800 entries)
   key: timeline:{user_id}   value: [post_id, ...]  score = post_id (time-sortable)
 
 social_graph_meta
-  user_id, follower_count, is_celebrity (derived, threshold ~100K)
+  user_id, follower_count, is_celebrity (derived; promote >100K, demote <80K)
+                                       -- hysteresis prevents mode flapping, see 7.3
 ```
 `follows` needs **both directions** stored — a very common miss. Fan-out needs
 "who follows me"; the UI needs "who do I follow".
@@ -171,7 +172,150 @@ flowchart TD
 
 ---
 
-## 7. Other deep dives
+## 7. The celebrity problem, in depth
+
+Saying "I'll use a hybrid" is where most candidates *stop*. It is where a good
+interviewer *starts*. Every question below is one you should expect.
+
+### 7.1 Why it's actually a problem — put numbers on it
+
+```
+Ordinary user:  200 followers      -> 200 timeline writes per post. Invisible.
+Large account:  100 M followers    -> 100 M timeline writes per post.
+
+At ~50 K Redis writes/s per fan-out worker (pipelined, batches of 500):
+  100 M / 50 K = 2,000 worker-seconds for ONE post.
+  With 100 workers dedicated to it: ~20 s before the last follower sees it.
+  Meanwhile those workers are not fanning out anyone else's posts.
+
+Worse: a celebrity posting 10 times in an hour = 1 B timeline writes,
+which is more fan-out work than ~2.5 M ordinary users' posts combined.
+```
+
+Two distinct failures, and you should name both:
+1. **Latency** — the last follower is minutes behind the first. The feed is no longer
+   "5 s fresh".
+2. **Noisy neighbour** — one author monopolises the shared fan-out fleet, so
+   *everyone else's* posts get delayed too. This is the more serious one, and it's the
+   argument for isolating celebrity traffic onto its own worker pool/queue even before
+   you decide to skip fan-out.
+
+### 7.2 "Why 100 K? What about a user with 99,999 followers?"
+
+The honest answer: **the threshold is not a property of the user, it's a cost
+comparison**, and you should derive it rather than assert it.
+
+```
+push cost  ≈ follower_count x write_cost
+pull cost  ≈ reader_count_who_open_feed x merge_cost
+
+Push when:  followers x P(follower reads soon)  <  cost of everyone pulling you
+```
+
+Practical consequences worth stating:
+- The right threshold falls out of **your follower-count distribution**. Social graphs
+  are power-law: a threshold anywhere in the 10 K–1 M range captures a tiny number of
+  accounts but most of the fan-out volume. That flatness is *why* the exact number
+  doesn't matter much — say that, because it defuses the question.
+- Make it a **runtime-tunable config**, not a constant. You will change it during
+  incidents.
+- A cleaner formulation: rank accounts by `followers x post_rate` and treat the top
+  N accounts as celebrities, so a low-follower/high-frequency bot is also caught.
+
+### 7.3 The transition problem (the question that catches people out)
+
+An account crosses the threshold. Its old posts were **pushed** into timelines; its new
+posts are **pulled**. Now:
+- A reader could see a post **twice** (once from their pushed timeline, once from the
+  celebrity pull) → merge must **dedup by post_id**. The ZSET scored by post_id makes
+  this free.
+- An account that drops *below* the threshold has posts that were never pushed. If you
+  now stop pulling them, those posts **silently vanish** from feeds. This is a real
+  data-loss-shaped bug.
+
+Fixes to state explicitly:
+- **Never retroactively rewrite timelines** on a threshold change — too expensive.
+- Keep pulling from an account for a **grace window** (e.g. the timeline depth, ~800
+  posts or 7 days) after it drops below the threshold, so nothing disappears.
+- Add **hysteresis**: promote to celebrity at 100 K, demote only below 80 K. Without
+  it, an account hovering at the boundary flaps between modes on every follower churn,
+  producing inconsistent feeds and cache thrash.
+- Store the mode **on the post, not just the author** (`post.was_fanned_out`), so the
+  reader always knows whether a given post is already in their timeline. This turns an
+  ambiguous global question into a per-post fact.
+
+### 7.4 The read side has its own celebrity problem
+
+Hybrid moves cost from write to read — so bound the read.
+
+```
+Reader follows 5 celebrities   -> 5 extra cache reads. Fine.
+Reader follows 500 celebrities -> 500 reads per feed load. NOT fine.
+```
+
+A user who follows thousands of large accounts is common (that's how many people use
+Twitter). Mitigations:
+- **Cap the pull set**: pull from the top K celebrities by recency/affinity, not all of
+  them. The feed is ranked and truncated to 20 items anyway — most of those 500 would
+  contribute nothing.
+- **Batch the pull**: one multi-get over `celeb_recent:{id}` keys, not 500 round trips.
+- **Cache the merged result** per reader for a few seconds. During a spike, thousands of
+  readers of the same celebrity produce identical merges.
+
+### 7.5 It's really a per-(author, reader) decision
+
+The sharpest version of the answer: push/pull isn't a property of the author at all.
+It's a property of the **edge**.
+
+| Author | Reader | Decision |
+|---|---|---|
+| Ordinary | Active | **Push** — cheap, and it'll be read |
+| Ordinary | Inactive | **Skip** — build on next login |
+| Celebrity | Active *and* follows few celebs | **Push** — read latency matters, cost is bounded |
+| Celebrity | Inactive / follows many celebs | **Pull** |
+
+So a celebrity may still be fanned out to their most-engaged followers while everyone
+else pulls. This "**partial fan-out**" is what real systems converge on, and offering it
+unprompted is a strong senior signal — it shows you see the binary as a simplification
+rather than a rule.
+
+### 7.6 Celebrity post storage
+
+```
+celeb_recent:{author_id}   Redis ZSET, score = post_id (time-sortable)
+                           capped at ~200 entries, TTL 7 days
+```
+Small, hot, read by millions → replicate it widely and add an **in-process L1 cache**
+with a 1–2 s TTL in the Feed Service. With 500 feed instances that caps Redis reads for
+one celebrity at ~500/s no matter how viral the post is. Same hot-key move as the URL
+shortener.
+
+### 7.7 What to measure
+
+If you can't detect it, you can't tune the threshold:
+
+| Metric | Why |
+|---|---|
+| Fan-out lag p99, **broken down by author tier** | An aggregate lag number hides the celebrity tail entirely |
+| Fan-out writes/s attributed per author | Finds the noisy neighbour before it pages you |
+| Feed read latency vs *number of celebrities followed* | Detects the §7.4 read-side problem |
+| Count of accounts near the threshold | Predicts flapping and cost cliffs |
+
+### 7.8 Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "Why not just pull for everyone?" | Read latency: O(followees) queries + merge on every feed load, at 600 K peak QPS. Push amortises that work once per post instead of once per read, and reads outnumber writes 50:1 |
+| "Why not push for everyone?" | Unbounded write amplification; one post can cost 100 M writes and starve the shared fan-out fleet |
+| "What if a celebrity posts during a spike?" | Their queue is isolated; no fan-out occurs; readers pull from a widely replicated, L1-cached key. The spike hits the cheapest path in the system |
+| "How does the reader not see duplicates?" | Merge dedups by post_id; ZSET semantics make re-insertion idempotent |
+| "A celebrity follows another celebrity — problem?" | No. Following is unrelated to fan-out cost; only *follower* count matters |
+| "How fresh is a celebrity post?" | **Fresher** than a normal one — pull has no fan-out delay at all. A nice inversion worth pointing out |
+| "Does the threshold need to be exact?" | No — the follower distribution is power-law, so the cost curve is flat across a wide range. It's a tunable, not a constant |
+
+---
+
+## 8. Other deep dives
 
 ### Read-your-writes for the author
 The author must see their own post instantly even before fan-out completes. Fix: the
@@ -203,7 +347,7 @@ system degrades rather than fails. Warm the cache asynchronously afterwards.
 
 ---
 
-## 8. Failure modes
+## 9. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -211,12 +355,12 @@ system degrades rather than fails. Warm the cache asynchronously afterwards.
 | Timeline Redis node down | Affected users get pull-path fallback; higher latency, still functional |
 | Post DB shard down | Posts by those authors fail to hydrate → render a placeholder rather than failing the whole feed (**partial response**) |
 | Kafka down | Posts still persist (outbox holds events); fan-out catches up after recovery |
-| Celebrity posts | No fan-out at all — the hybrid design already handles this |
+| Celebrity posts | No fan-out at all; readers pull from a replicated, L1-cached key. Celebrity traffic also runs on an **isolated queue/worker pool** so it cannot delay ordinary fan-out (see 7.1) |
 | Thundering herd on a viral post | Post cache + in-process cache; counters sharded |
 
 ---
 
-## 9. Scale evolution
+## 10. Scale evolution
 
 - **10x reads:** more Redis capacity and app instances; add a per-instance L1 cache for
   hot posts; move media entirely to CDN.
@@ -228,14 +372,35 @@ system degrades rather than fails. Warm the cache asynchronously afterwards.
 
 ---
 
-## 10. Trade-offs summary
+## 11. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
-| Fan-out | Hybrid push/pull | Pure push | Celebrities make pure push unbounded |
+| Fan-out | Hybrid push/pull, per-edge where it pays | Pure push | Celebrities make pure push unbounded; the per-edge refinement recovers read latency for engaged followers |
+| Threshold | Tunable + hysteresis (100K up / 80K down) | Fixed constant | Prevents flapping; the power-law graph makes the exact value uncritical |
 | Timeline contents | Post IDs only | Full post copies | 400x less memory; content shared across timelines |
 | Fan-out targets | Active users only | All followers | Cuts ~70% of write volume |
 | Ordering | Snowflake IDs as sort key | Separate timestamp | Time-sortable IDs make merge-sort trivial |
 | Consistency | Eventual, 5 s budget | Strong | Feeds do not need strong consistency |
 | Unfollow | Filter at read time | Rewrite timeline | Rewrites are expensive and rarely observed |
 | Counters | Sharded + approximate | Exact row updates | Avoids hot-row contention |
+
+---
+
+## 12. Rapid-fire probe answers
+
+Celebrity-specific probes are in [7.8](#78-rapid-fire-probe-answers). These cover the rest.
+
+| Probe | Answer |
+|---|---|
+| "Why store post IDs instead of the posts?" | ~400x less memory (1.3 TB vs ~500 TB), and one post's content is shared across every timeline it appears in instead of being copied |
+| "Why not offset pagination?" | The feed shifts constantly, so `OFFSET` skips or repeats items. Cursor on `(created_at, post_id)` is stable |
+| "The author posts but doesn't see it in their own feed." | Fan-out is async. The Feed Service merges the user's own recent posts from `posts_by_author` at read time — a cheap single-partition read — to give read-your-writes |
+| "User follows someone with 50 K posts." | Don't backfill. Insert only their most recent N posts, or let the timeline fill going forward |
+| "User unfollows someone." | Don't rewrite the timeline. Filter at read time and let the entries age out of the 800-entry cap |
+| "Why store the follow graph in both directions?" | Fan-out needs "who follows me" (`followers_by_user`); the UI needs "who do I follow". Neither query can be served by the other table |
+| "A timeline Redis node dies." | Those users' timelines are gone. Rebuild on demand via the pull path — slower but correct. The system degrades rather than fails; warm the cache afterwards |
+| "Fan-out is at-least-once — do users see duplicates?" | No. The timeline is a ZSET keyed by post_id, so re-insertion is idempotent for free |
+| "Why cap timelines at 800 entries?" | Nobody scrolls further. Deeper pages fall back to a pull query, which is rare enough to be cheap |
+| "How would you add ML ranking?" | Two-stage: candidate generation (graph + recommendations, ~500 items) then ranking at read time via a low-latency inference service with precomputed features |
+| "A post goes viral — the like counter is a hot row." | Never `UPDATE ... SET count = count + 1`. Sharded Redis counters (`likes:{post}:{0..15}`) summed on read, flushed periodically. Approximate display counts are fine |

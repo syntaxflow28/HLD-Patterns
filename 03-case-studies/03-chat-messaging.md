@@ -259,3 +259,21 @@ UI**. Last-seen is written on disconnect with a debounce.
 | Read state | `last_read_seq` per user | Per-message read flags | O(1) instead of O(messages) |
 | Partitioning | `(conversation_id, month)` | `conversation_id` only | Bounds partition size for busy groups |
 | Presence | TTL keys + UI-scoped subscriptions | Broadcast to all contacts | O(contacts) fan-out per status change is unaffordable |
+
+---
+
+## 12. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "How do all participants agree on message order?" | A server-assigned monotonic sequence number **per conversation**. Order is a property of the conversation, not of global time |
+| "Why not order by client timestamp?" | Client clocks are skewed, wrong, and user-settable. Never derive correctness from them |
+| "How do you find which gateway holds a user's connection?" | A connection registry in Redis (`user → gateway node`) with a TTL, written on connect and refreshed by heartbeat |
+| "A gateway node dies with 100 K connections." | Clients reconnect (with jittered backoff, or you get a reconnect storm) and land on other nodes; registry entries expire by TTL. Messages queued meanwhile are delivered on reconnect |
+| "Recipient is offline." | The message is durably stored before the ack. On reconnect the client sends its `last_seq` and pulls everything after it |
+| "Can you guarantee exactly-once delivery?" | No — not across an unreliable client link. At-least-once transport plus client-side dedup on `message_id` gives exactly-once *effect* |
+| "Why WebSockets over long-polling?" | 100 M concurrent connections: WebSockets avoid per-request handshake overhead and support server push. Long-poll is the fallback for restrictive networks |
+| "Read receipts for a 500-member group." | Store `last_read_seq` per member, not a flag per message. O(1) per member instead of O(messages), and the receipt UI only needs a count |
+| "Presence for a user with 5,000 contacts." | Don't broadcast. Presence is a TTL key; clients subscribe only to the contacts currently visible on screen |
+| "Does E2E encryption change the design?" | Server-side search, moderation, and content-based dedup become impossible; ordering and delivery are unaffected because they only need metadata |
+| "Why partition by `(conversation_id, month)`?" | `conversation_id` alone gives unbounded partitions for busy groups. Adding a time bucket keeps partitions scannable |

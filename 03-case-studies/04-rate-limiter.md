@@ -265,3 +265,21 @@ Version rules and support a **dry-run / shadow mode** so you can see what a new 
 | Placement | Layered edge → gateway → service | Single choke point | Each layer blocks what the next can't afford |
 | Failure policy | Fail open, per-rule override | Always fail closed | Limiter outage shouldn't become a full outage |
 | Storage | Redis, sharded by key | Durable DB | State is small, ephemeral, and rebuildable |
+
+---
+
+## 12. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "Why token bucket over sliding window?" | Clients legitimately burst then go quiet, and burst allowance is a product feature. Token bucket stores two numbers and refills lazily — no background timer |
+| "Redis is down. Do you allow or deny?" | Per-rule policy. Fail **open** with local-only limits for normal API traffic; fail **closed** for login/password-reset/payment, where unlimited attempts are worse than an outage |
+| "How far can the count overshoot?" | Bounded by `N nodes × allowance consumed per sync interval`. At 100 ms sync that's a fraction of a percent — quote the number, don't hand-wave |
+| "Why not just give each node `limit / N`?" | Load balancers aren't perfectly fair, so it over-restricts; and N changes on every deploy or autoscale event, silently changing the effective limit |
+| "What about clock skew between nodes?" | Use monotonic clocks locally, do authoritative refill against **Redis's** clock during sync, and clamp negative deltas to zero so a backwards jump can't mint tokens |
+| "One tenant sends 200 K req/s." | Local buckets absorb most of it. Beyond that, split the key into `key:0..15` sub-counters with `limit/16` each — trade a little accuracy for a lot of headroom |
+| "How much latency does this add?" | Near zero on the hot path, because the decision is made from in-process state. Budget < 50 µs of CPU per check, and alert if it regresses |
+| "Can you enforce one global limit across regions?" | Not without destroying p99 — cross-region round trips are 100 ms+. Enforce `limit/regions` per region, or define the limit as per-region. Only billing quotas get an async global tally |
+| "Why does `Retry-After` matter?" | Without it, well-behaved clients retry immediately and your rate limit becomes a retry storm that amplifies the overload it was meant to prevent |
+| "Someone pushes a rule with limit = 0." | Blocks everything. Validate rules, support shadow/dry-run mode to see what a rule *would* block, roll out in stages, and keep rollback fast |
+| "Where should limiting live — edge, gateway, or service?" | All three. Edge does cheap volumetric per-IP, gateway does the business rules with auth context, services protect specific expensive endpoints. Defence in depth |

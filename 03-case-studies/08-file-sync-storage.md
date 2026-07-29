@@ -273,3 +273,22 @@ a cold file is slow (with a "restoring…" state).
 | Conflicts | Conflicted copies | Last-write-wins | LWW silently loses user work |
 | Ordering | Server-assigned sequence | Client timestamps | Client clocks are untrustworthy |
 | Sharding | By namespace | By file | Keeps sequence assignment and delta queries single-shard |
+
+---
+
+## 11. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "Why content-addressed blocks?" | Delta sync, cross-user dedup, cheap version history, and integrity checking all fall out of one decision. The hash *is* the identity and the checksum |
+| "Why not fixed-size chunks?" | Insert one byte at the front of a file and every boundary shifts, invalidating all blocks. Content-defined chunking (rolling hash) keeps boundaries stable under insertion |
+| "Two devices edit the same file offline." | Detect divergence via the parent version, keep the server version canonical, and materialise the client's as a conflicted copy. Never merge opaque binary files |
+| "Why not last-write-wins? It's simpler." | Its failure mode is **silent data loss**, and it relies on client clocks. A conflicted copy is uglier but never destroys work — that trade is the whole question |
+| "User renames a 10 GB folder." | One metadata row update. Nothing re-uploads, because content and metadata are separate and blocks are addressed by hash, not path |
+| "Client dies mid-upload." | No metadata commit means no version exists — nothing partial is ever visible. Orphan blocks are garbage collected; resume by re-asking which blocks the server has |
+| "A sync notification is lost." | Harmless. The notification carries only a cursor; the device's pull is authoritative and its periodic poll catches up. Push is an optimisation, polling is the guarantee |
+| "Why not order by client timestamp?" | Clocks are unreliable. Ordering comes from the server-assigned journal sequence per namespace, which is also what makes sync resumable and idempotent |
+| "How do you delete blocks safely?" | Refcount or periodic mark-and-sweep, always with a grace period, and never delete a recently written block — the race between 'upload block' and 'GC decides it's unreferenced' is a data-loss bug |
+| "Does global dedup leak information?" | Yes — upload speed reveals whether a file already exists. Use per-account dedup for sensitive tiers or add server-side randomisation |
+| "A folder shared with 500 people." | It's its own namespace with one journal and ACL, not 500 copies. If the journal gets hot, sub-partition by subtree and push large-folder clients to selective sync |
+| "Why is this different from Google Docs?" | Docs is character-level concurrent editing — OT or CRDT on a structured document. Here files are opaque blobs, so semantic merge is impossible and conflicted copies are the honest answer |

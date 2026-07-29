@@ -263,3 +263,23 @@ at write time to make every read cheap.
 | Popular content | Pre-positioned push to edges | Pull on first miss | Avoids origin thundering herd on releases |
 | View counts | Async, approximate | Synchronous exact counter | Event volume is enormous; exactness has no product value |
 | Storage | Tiered with lifecycle policies | All hot | Long tail is rarely accessed; archive is ~20x cheaper |
+
+---
+
+## 11. Rapid-fire probe answers
+
+| Probe | Answer |
+|---|---|
+| "Why not upload through your API servers?" | Multi-GB bodies through the app tier burn bandwidth, memory, and connection slots for no benefit. Pre-signed URLs send bytes straight to object storage |
+| "Why chunk the transcode instead of encoding the file?" | A 1-hour video becomes ~360 chunks × 6 renditions = 2,160 independent tasks. Minutes instead of hours, and a failure retries one chunk rather than the whole video |
+| "Why must chunks split on keyframes?" | So the encoded pieces concatenate cleanly, and so the player can switch renditions mid-stream without artefacts. ABR depends on aligned boundaries |
+| "Who decides the bitrate — client or server?" | The client. Only it knows its actual throughput and buffer level. The server just publishes the ladder in the manifest |
+| "How do you invalidate the CDN when a video changes?" | You don't. Segments are immutable and content-addressed, so they're cached forever. That's how media CDNs reach 95%+ hit rates — the invalidation problem is designed away |
+| "Why multiple CDNs?" | Cost leverage, resilience to one provider's outage, and better p99 — steered per-request using QoE beacons measured per (CDN, ISP, region). The feedback loop is the interesting part, not the redundancy |
+| "A big release goes live and origin melts." | Shouldn't happen: regional shield tier, request coalescing so 10 K misses become one origin fetch, and pre-positioning predicted-popular content to edges before release |
+| "Why is time-to-first-frame the headline metric?" | It correlates directly with abandonment. Fixes: QUIC/connection reuse, prefetch the manifest, start at a low rendition, keep the first segment short |
+| "A video crashes the encoder every time." | Retry twice, then dead-letter with a diagnostic dump. One poison file must never stall the queue |
+| "Small creator's clip stuck behind a 4-hour upload." | Priority queues tiered by expected watch volume, plus progressive publish — release 480p as soon as it's ready rather than waiting for 4K |
+| "How is live streaming different?" | Latency-bounded: 1–2 s segments or LL-HLS, real-time encoding with no ability to fall behind, no pre-positioning possible, and DVR requires persisting live segments as they're produced |
+| "Are view counts exact?" | No, and they shouldn't be. Stream the events and aggregate in windows — products display "1.2 M views" precisely because exactness has no user value at that scale |
+| "Why is AV1 worth the encode cost?" | ~30% bitrate reduction for much more CPU. You encode once and serve millions of times, so the egress saving dominates. Quantify it rather than asserting it |
