@@ -227,25 +227,18 @@ Each of these gates exists because of a real production failure:
 
 ## 7. Data model
 
-```
-device_tokens(user_id, device_id) PK, platform, token, app_version,
-              last_seen, valid                       -- shard by user_id
-preferences(user_id, category) PK, channels[], enabled,
-            quiet_start, quiet_end, timezone, frequency_cap
-templates(template_id, version, locale) PK, subject, body, channel  -- versioned, immutable
-notifications(user_id, created_at, notification_id) PK,
-              category, dedup_key, ttl, state         -- time-partitioned, TTL 30 days
-deliveries(notification_id, channel) PK, provider, provider_msg_id,
-              state, attempts, last_error, sent_at, delivered_at, opened_at
-inbox(user_id, created_at, item_id) PK, payload, read_at   -- in-app, longer retention
-```
-
-Store choice: wide-column (Cassandra/DynamoDB) for `notifications`/`deliveries` — huge
-volume, time-ordered, TTL support, no joins. Relational for preferences and templates —
-small, needs integrity and admin queries.
+| Table | Key | Other fields | Store, and why |
+|---|---|---|---|
+| **device_tokens** | PK `(user_id, device_id)` | `platform`, `token`, `app_version`, `last_seen`, `valid` | Relational. `valid` is cleared when a provider reports the token dead |
+| **preferences** | PK `(user_id, category)` | `channels[]`, `enabled`, `quiet_start`, `quiet_end`, `timezone`, `frequency_cap` | Relational — small, needs integrity and admin queries |
+| **templates** | PK `(template_id, version, locale)` | `subject`, `body`, `channel` | Relational. Versioned and immutable, so a send can always be reproduced |
+| **notifications** | PK `(user_id, created_at, notification_id)` | `category`, `dedup_key`, `ttl`, `state` | Wide-column (Cassandra / DynamoDB) — huge volume, time-ordered, native TTL, no joins |
+| **deliveries** | PK `(notification_id, channel)` | `provider`, `provider_msg_id`, `state`, `attempts`, `last_error`, `sent_at`, `delivered_at`, `opened_at` | Wide-column. One row per channel attempt — the highest-volume table in the system |
+| **inbox** | PK `(user_id, created_at, item_id)` | `payload`, `read_at` | In-app feed, longer retention than `notifications` |
 
 **Shard by `user_id`** everywhere: every read is "notifications for this user", and
-frequency caps/dedup are per user.
+frequency caps and dedup are evaluated per user — so both the read path and the write-time
+checks stay single-shard.
 
 ---
 

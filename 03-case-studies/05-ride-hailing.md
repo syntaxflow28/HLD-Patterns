@@ -268,20 +268,13 @@ the trip record so later surge changes can't alter it.
 
 ## 8. Data model
 
-```
-driver_state          (in-memory, replicated; source of truth for matching)
-  driver_id -> {status, lat, lng, h3, heading, ts, current_trip}
-
-trips                 (sharded RDBMS / Spanner-like; strong consistency)
-  PK: trip_id (UUID)   shard by rider_id or city
-  rider_id, driver_id, state, quoted_price, pickup, dropoff, timestamps...
-  + trip_events (append-only audit log of every state transition)
-
-trip_traces           (object storage, columnar, partitioned by day/city)
-  trip_id, [(ts, lat, lng)]   -- written after the trip, not during
-
-driver_daily_stats    (analytics store)
-```
+| Table | Key | Other fields | Store, and why |
+|---|---|---|---|
+| **driver_state** | `driver_id` | `status`, `lat`, `lng`, `h3`, `heading`, `ts`, `current_trip` | In-memory, replicated. The source of truth for matching — it changes 250 K times/s and is worthless once stale |
+| **trips** | PK `trip_id` (UUID)<br>shard by `rider_id` or city | `rider_id`, `driver_id`, `state`, `quoted_price`, `pickup`, `dropoff`, timestamps | Sharded RDBMS / Spanner-like. Money and state transitions need strong consistency |
+| **trip_events** | PK `(trip_id, seq)` | `type`, `payload`, `ts` | Append-only audit log of every state transition |
+| **trip_traces** | `trip_id` | `[(ts, lat, lng)]` | Object storage, columnar, partitioned by day and city. Written **after** the trip, not during |
+| **driver_daily_stats** | PK `(driver_id, day)` | earnings, trips, online hours | Analytics store, async rollup |
 
 The **trip state machine** is worth drawing:
 

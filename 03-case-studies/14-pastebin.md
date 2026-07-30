@@ -170,19 +170,11 @@ where that threshold sits is the skill being tested.
 
 ## 5. Data model
 
-```
-Table pastes                       (KV store: DynamoDB / Cassandra)
-  PK: key                          <- hash-partitioned, all access is a point lookup
-  blob_id, size, content_hash, language, visibility, password_hash,
-  owner_id?, created_at, expires_at, burn_after_read, is_deleted
-
-Blob storage (S3)
-  s3://pastes/{shard_prefix}/{blob_id}     gzip/zstd-compressed body
-  Object lifecycle rules for coarse cleanup; explicit deletes for exact expiry
-
-Table expiry_index                 (only for pastes with an expiry)
-  PK: expiry_bucket (hour)   CK: key       <- the deletion worker scans one bucket
-```
+| Store | Key | Other fields | Store, and why |
+|---|---|---|---|
+| **pastes** | PK `key` | `blob_id`, `size`, `content_hash`, `language`, `visibility`, `password_hash`, `owner_id?`, `created_at`, `expires_at`, `burn_after_read`, `is_deleted` | KV store (DynamoDB / Cassandra). Hash-partitioned — every read is a point lookup |
+| **blob storage** | `s3://pastes/{shard_prefix}/{blob_id}` | gzip/zstd-compressed body | S3. Lifecycle rules for coarse cleanup, explicit deletes for exact expiry |
+| **expiry_index** | PK `expiry_bucket` (hour)<br>CK `key` | — | Only pastes that have an expiry. The deletion worker scans one bucket at a time |
 
 Three decisions to defend:
 - **Metadata and blob are separate** because they have different access patterns, sizes,

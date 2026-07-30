@@ -268,14 +268,12 @@ is saved.
 
 ## 8. Data model
 
-```
-videos(video_id PK, uploader_id, title, description, status, duration,
-       created_at, visibility)                       -- sharded by video_id
-renditions(video_id, rendition_id) PK, codec, resolution, bitrate,
-       manifest_url, size_bytes, state
-watch_events -> Kafka -> columnar warehouse          -- never a row per view in the OLTP DB
-view_counts(video_id, count)                          -- approximate, async aggregated
-```
+| Table | Key | Other fields | Store, and why |
+|---|---|---|---|
+| **videos** | PK `video_id` | `uploader_id`, `title`, `description`, `status`, `duration`, `created_at`, `visibility` | Sharded by `video_id`; every access is a point lookup |
+| **renditions** | PK `(video_id, rendition_id)` | `codec`, `resolution`, `bitrate`, `manifest_url`, `size_bytes`, `state` | One row per output of the transcoding pipeline, so playback can pick a ladder rung |
+| **watch_events** | — | — | Kafka → columnar warehouse. **Never** a row per view in the OLTP database |
+| **view_counts** | PK `video_id` | `count` | Approximate, aggregated asynchronously from the stream |
 
 **View counts deserve a callout.** 1 B watch-hours/day means an enormous event volume.
 Don't increment a row per view. Stream the events, aggregate in windows, and write

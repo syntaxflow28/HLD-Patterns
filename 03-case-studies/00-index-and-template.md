@@ -96,7 +96,10 @@ section that solves it. Finish with **the instinct to resist** — the plausible
 fix ("add a cache", "wrap it in a transaction", "add an index") and precisely why it fails.
 
 ## 5. Data model
-Entity(pk, fields) — access patterns — store choice — index/shard key
+| Table | Key | Other fields | Store, and why |
+One row per entity. Put the reasoning in the last column — access pattern, store choice,
+and why *this* partition/shard key. Add a `mermaid erDiagram` above it only when the
+entities actually reference each other.
 
 ## 6. High-level architecture
 ```mermaid

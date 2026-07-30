@@ -235,29 +235,25 @@ notification is harmless because the cursor pull is authoritative.
 
 ## 7. Data model
 
+```mermaid
+erDiagram
+    NAMESPACES ||--o{ FILES : contains
+    NAMESPACES ||--o{ JOURNAL : "ordered change log"
+    NAMESPACES ||--o{ ACL : "shared with"
+    NAMESPACES ||--o{ CURSORS : "synced by device"
+    FILES ||--o{ VERSIONS : "history of"
+    VERSIONS }o--o{ BLOCKS : "references by hash"
 ```
-namespaces(ns_id) PK                                        -- a user's root, or a shared folder
-      owner_id, type
 
-files(ns_id, file_id) PK                                    -- shard by ns_id
-      parent_id, name, is_dir, current_version, deleted, modified_at
-      UNIQUE (ns_id, parent_id, name) WHERE NOT deleted     -- no two siblings share a name
-
-versions(ns_id, file_id, version) PK                        -- ns_id so it lives on the file's shard
-      parent_version, block_hashes[], size, modified_by, created_at, device_id
-
-blocks(hash) PK                                             -- global, separate store
-      size, refcount, storage_location
-
-cursors(device_id, ns_id) PK                                -- one cursor PER NAMESPACE per device
-      cursor
-
-acl(ns_id, principal) PK
-      role
-
-journal(ns_id, seq) PK                                      -- seq is per-namespace, not global
-      file_id, op, version, created_at
-```
+| Table | Key | Other fields | Notes |
+|---|---|---|---|
+| **namespaces** | PK `ns_id` | `owner_id`, `type` | A user's root, or a shared folder |
+| **files** | PK `(ns_id, file_id)` | `parent_id`, `name`, `is_dir`, `current_version`, `deleted`, `modified_at` | Shard by `ns_id`. `UNIQUE (ns_id, parent_id, name) WHERE NOT deleted` — no two siblings share a name |
+| **versions** | PK `(ns_id, file_id, version)` | `parent_version`, `block_hashes[]`, `size`, `modified_by`, `created_at`, `device_id` | `ns_id` is in the key so versions live on their file's shard |
+| **blocks** | PK `hash` | `size`, `refcount`, `storage_location` | Global, separate store — deduplicated across all users |
+| **cursors** | PK `(device_id, ns_id)` | `cursor` | One cursor **per namespace** per device |
+| **acl** | PK `(ns_id, principal)` | `role` | |
+| **journal** | PK `(ns_id, seq)` | `file_id`, `op`, `version`, `created_at` | `seq` is per-namespace, not global |
 
 Four details in those keys are load-bearing, and interviewers do check them:
 

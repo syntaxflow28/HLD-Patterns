@@ -160,18 +160,12 @@ check the pool).
 
 ## 6. Data model
 
-```
-Table urls            (KV store, e.g. DynamoDB / Cassandra)
-  PK: short_key       <- hash-partitioned: perfectly uniform, all access is point lookup
-  long_url, created_at, expires_at, owner_id, is_active
+| Table | Key | Other fields | Store, and why |
+|---|---|---|---|
+| **urls** | PK `short_key` | `long_url`, `created_at`, `expires_at`, `owner_id`, `is_active` | KV store (DynamoDB / Cassandra). Hash-partitioned — every access is a point lookup |
+| **clicks_raw** | PK `(short_key, bucket_hour)`<br>CK `click_id` | `ts`, `ip_country`, `referrer`, `user_agent_class` | Append-only, time-partitioned — or skip the table and write straight to Kafka → lake |
+| **click_stats** | PK `(short_key, day)` | `clicks`, `uniques` (HLL), `top_countries` | Pre-aggregated so the stats API never scans raw events |
 
-Table clicks_raw      (append-only, time-partitioned; or straight to Kafka -> lake)
-  PK: (short_key, bucket_hour)   CK: click_id
-  ts, ip_country, referrer, user_agent_class
-
-Table click_stats     (pre-aggregated for the stats API)
-  PK: (short_key, day)   clicks, uniques(HLL), top_countries
-```
 `short_key` is a near-perfect shard key: extremely high cardinality, uniformly random,
 and present in 100% of queries. Say this explicitly — it is exactly what the
 interviewer wants to hear about shard key selection.

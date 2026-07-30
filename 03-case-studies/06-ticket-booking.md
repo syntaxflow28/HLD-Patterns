@@ -272,15 +272,23 @@ transaction.
 
 ## 8. Data model
 
+```mermaid
+erDiagram
+    EVENTS ||--o{ SEATS : "inventory"
+    EVENTS ||--o{ HOLDS : "temporary claim"
+    HOLDS ||--o| BOOKINGS : "converts to"
+    BOOKINGS ||--o{ BOOKING_EVENTS : "saga log"
+    SEATS }o--o| BOOKINGS : "sold via"
 ```
-events(event_id PK, venue_id, starts_at, on_sale_at, status)          -- shard key
-seats (event_id, seat_id) PK, section, row, price_tier,
-       status ENUM(AVAILABLE|HELD|SOLD), hold_id, held_until, booking_id, version
-holds (hold_id PK, event_id, user_id, seat_ids[], expires_at, state)
-bookings(booking_id PK, event_id, user_id, seat_ids[], payment_id, state, created_at)
-booking_events(booking_id, seq, type, payload)     -- audit / saga log
-idempotency(key PK, user_id, request_hash, response, created_at)
-```
+
+| Table | Key | Other fields | Notes |
+|---|---|---|---|
+| **events** | PK `event_id` | `venue_id`, `starts_at`, `on_sale_at`, `status` | `event_id` is the shard key for everything below |
+| **seats** | PK `(event_id, seat_id)` | `section`, `row`, `price_tier`, `status` (AVAILABLE / HELD / SOLD), `hold_id`, `held_until`, `booking_id`, `version` | `version` is the optimistic-locking column that makes a double-book impossible |
+| **holds** | PK `hold_id` | `event_id`, `user_id`, `seat_ids[]`, `expires_at`, `state` | `expires_at` is what the reaper scans |
+| **bookings** | PK `booking_id` | `event_id`, `user_id`, `seat_ids[]`, `payment_id`, `state`, `created_at` | |
+| **booking_events** | PK `(booking_id, seq)` | `type`, `payload` | Audit and saga log — how a half-finished booking is recovered |
+| **idempotency** | PK `key` | `user_id`, `request_hash`, `response`, `created_at` | A retried "confirm" must not buy two tickets |
 
 **Shard key = `event_id`.** Every booking transaction touches exactly one event, so
 transactions stay local. The downside is that a mega-event is a hot shard — accept it

@@ -326,21 +326,27 @@ nothing", which is both a security and a cost argument.
 
 ## 9. Data model
 
+```mermaid
+erDiagram
+    PAYMENTS ||--o{ PAYMENT_ATTEMPTS : "one row per PSP call"
+    PAYMENTS ||--o{ REFUNDS : ""
+    PAYMENTS ||--o{ DISPUTES : ""
+    ACCOUNTS ||--o{ LEDGER_ENTRIES : "double-entry postings"
+    ACCOUNTS ||--o{ BALANCE_SNAPSHOTS : "periodic rollup"
 ```
-payments(payment_id PK, order_id, customer_id, amount_minor, currency,
-         state, psp, psp_payment_id, created_at, updated_at, version)
-payment_attempts(attempt_id PK, payment_id, psp, request_hash,
-         psp_status, error_code, created_at)         -- one row per PSP call
-idempotency_keys(key PK, scope, request_hash, state, response_body, created_at)
-ledger_entries(entry_id PK, txn_id, account_id, direction, amount_minor,
-         currency, posted_at, ref_type, ref_id)      -- append-only, partitioned by month
-accounts(account_id PK, owner_type, owner_id, currency, type)
-balance_snapshots(account_id, as_of_date) PK, balance_minor
-outbox(id PK, aggregate_id, type, payload, published_at)
-webhook_events(psp, psp_event_id) PK, payload, received_at, processed_at
-refunds(refund_id PK, payment_id, amount_minor, state, psp_refund_id)
-disputes(dispute_id PK, payment_id, reason, state, due_by, evidence_ref)
-```
+
+| Table | Key | Other fields | Notes |
+|---|---|---|---|
+| **payments** | PK `payment_id` | `order_id`, `customer_id`, `amount_minor`, `currency`, `state`, `psp`, `psp_payment_id`, `created_at`, `updated_at`, `version` | Amounts always in **minor units** as integers — never floats |
+| **payment_attempts** | PK `attempt_id` | `payment_id`, `psp`, `request_hash`, `psp_status`, `error_code`, `created_at` | One row per PSP call, so a retry storm is fully reconstructable |
+| **idempotency_keys** | PK `key` | `scope`, `request_hash`, `state`, `response_body`, `created_at` | `request_hash` catches a key reused with a *different* body |
+| **ledger_entries** | PK `entry_id` | `txn_id`, `account_id`, `direction`, `amount_minor`, `currency`, `posted_at`, `ref_type`, `ref_id` | Append-only, partitioned by month. Entries sharing a `txn_id` must sum to zero |
+| **accounts** | PK `account_id` | `owner_type`, `owner_id`, `currency`, `type` | |
+| **balance_snapshots** | PK `(account_id, as_of_date)` | `balance_minor` | So a balance is a snapshot plus a short tail, not a scan of all history |
+| **outbox** | PK `id` | `aggregate_id`, `type`, `payload`, `published_at` | Written in the same transaction as the state change |
+| **webhook_events** | PK `(psp, psp_event_id)` | `payload`, `received_at`, `processed_at` | The unique key **is** the idempotency mechanism — see below |
+| **refunds** | PK `refund_id` | `payment_id`, `amount_minor`, `state`, `psp_refund_id` | |
+| **disputes** | PK `dispute_id` | `payment_id`, `reason`, `state`, `due_by`, `evidence_ref` | |
 
 `webhook_events` has a **unique key on `(psp, psp_event_id)`** — that single constraint
 is what makes webhook processing idempotent under the PSPs' aggressive retries.

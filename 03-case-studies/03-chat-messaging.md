@@ -124,31 +124,25 @@ exists, and none of them are solvable without it.
 
 ## 5. Data model
 
+```mermaid
+erDiagram
+    CONVERSATIONS ||--o{ MESSAGES : "ordered by seq"
+    CONVERSATIONS ||--o{ CONVERSATION_MEMBERS : "fan-out target list"
+    USERS ||--o{ CONVERSATIONS_BY_USER : "chat list"
+    USERS ||--o{ USER_DELIVERY_STATE : "read and delivered cursors"
+    USERS ||--o| MAILBOX : "pending while offline"
+    USERS ||--o{ CONNECTION_REGISTRY : "live sockets"
 ```
-messages_by_conversation                (Cassandra)
-  PARTITION KEY: (conversation_id, bucket)     bucket = month, to bound partition size
-  CLUSTERING KEY: seq DESC                      -> ordered reads, single-partition
-  columns: message_id, sender_id, body, created_at, client_msg_id
 
-conversation_meta
-  conversation_id, type, member_count, last_seq, last_message_at
-
-conversation_members
-  PK conversation_id, CK user_id       -> fan-out target list
-
-conversations_by_user                   (inbox list)
-  PK user_id, CK last_message_at DESC  -> chat list ordering
-
-user_delivery_state
-  PK (user_id, conversation_id)  last_delivered_seq, last_read_seq
-  -> receipts and unread counts are DERIVED from this, not stored per message
-
-offline_queue / mailbox                 (Redis or Cassandra)
-  PK user_id -> pending message refs for disconnected users
-
-connection_registry                     (Redis)
-  key user:{id}:conns -> {gatewayNodeId, connId, expiresAt}   TTL refreshed by heartbeat
-```
+| Table | Key | Other fields | Store, and why |
+|---|---|---|---|
+| **messages_by_conversation** | PK `(conversation_id, bucket)`<br>CK `seq DESC` | `message_id`, `sender_id`, `body`, `created_at`, `client_msg_id` | Cassandra. `bucket` = month, to bound partition size; the CK gives ordered single-partition reads |
+| **conversation_meta** | PK `conversation_id` | `type`, `member_count`, `last_seq`, `last_message_at` | |
+| **conversation_members** | PK `conversation_id`<br>CK `user_id` | — | The fan-out target list |
+| **conversations_by_user** | PK `user_id`<br>CK `last_message_at DESC` | — | The inbox list, already in chat-list order |
+| **user_delivery_state** | PK `(user_id, conversation_id)` | `last_delivered_seq`, `last_read_seq` | Receipts and unread counts are **derived** from this, not stored per message |
+| **offline_queue / mailbox** | PK `user_id` | pending message refs | Redis or Cassandra — the choice follows retention, see below |
+| **connection_registry** | key `user:{id}:conns` | `{gatewayNodeId, connId, expiresAt}` | Redis, TTL refreshed by heartbeat |
 
 **Bucketing the partition key by month is essential** — an unbounded partition per
 conversation eventually becomes a hot, oversized partition. Mentioning this shows real

@@ -125,25 +125,15 @@ long tail, pull for celebrities, merge at read time.**
 
 ## 5. Data model
 
-```
-posts                (sharded KV / Cassandra)
-  PK: post_id (Snowflake -> time-sortable)
-  author_id, text, media_ids, created_at, reply_to
+| Table | Key | Other fields | Store, and why |
+|---|---|---|---|
+| **posts** | PK `post_id` | `author_id`, `text`, `media_ids`, `created_at`, `reply_to` | Sharded KV / Cassandra. Snowflake IDs, so `post_id` is time-sortable |
+| **posts_by_author** | PK `author_id`<br>CK `post_id DESC` | — | Cassandra. A user's own timeline is one single-partition scan |
+| **followees_by_user** | PK `follower_id`<br>CK `followee_id` | — | "Who do I follow" — the UI query |
+| **followers_by_user** | PK `followee_id`<br>CK `follower_id` | — | "Who follows me" — the fan-out query |
+| **timeline** | key `timeline:{user_id}` | `[post_id, ...]`, score = `post_id` | Redis LIST or ZSET, capped at ~800 entries. Time-sortable IDs make the score free |
+| **social_graph_meta** | PK `user_id` | `follower_count`, `is_celebrity` (derived) | Promote above 100 K followers, demote below 80 K — hysteresis prevents mode flapping ([§8.3](#83-the-transition-problem-the-question-that-catches-people-out)) |
 
-posts_by_author      (Cassandra)
-  PK: author_id   CK: post_id DESC          -> user timeline, single-partition scan
-
-follows              (sharded, two tables because two access patterns)
-  followees_by_user: PK follower_id, CK followee_id
-  followers_by_user: PK followee_id, CK follower_id   -> needed for fan-out
-
-timeline             (Redis: LIST or ZSET per user, capped at ~800 entries)
-  key: timeline:{user_id}   value: [post_id, ...]  score = post_id (time-sortable)
-
-social_graph_meta
-  user_id, follower_count, is_celebrity (derived; promote >100K, demote <80K)
-                                       -- hysteresis prevents mode flapping, see 7.3
-```
 `follows` needs **both directions** stored — a very common miss. Fan-out needs
 "who follows me"; the UI needs "who do I follow".
 
