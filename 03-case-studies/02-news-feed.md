@@ -54,7 +54,22 @@ Timeline cache: 200 M users x 800 recent post ids x 8 B = ~1.3 TB
 
 ---
 
-## 3. API
+## 3. Core entities & API
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **User** | Profile plus counters | `followerCount` is what classifies an account as a celebrity, which changes its fan-out path |
+| **Post** | Authored content: text, media refs, `createdAt` | Immutable once published; the ID is time-sortable so timelines merge without a join |
+| **FollowEdge** | `(followerId, followeeId)` | Stored in **both** directions — fan-out needs followers-of-X, the UI needs following-of-X |
+| **TimelineEntry** | A post **ID** in a materialised per-user timeline | Storing IDs rather than post copies is what keeps 100 M-follower fan-out affordable |
+| **Media** | Blob in object storage, referenced by ID | Never inlined into a feed row |
+
+Note that `TimelineEntry` is a *derived* entity — it can be rebuilt from posts and follow
+edges. That is what makes the push/pull hybrid safe to change later.
+
+**Interface**
 
 ```
 POST /v1/posts        { text, mediaIds[] }   Idempotency-Key
@@ -71,7 +86,44 @@ feed that changes constantly.
 
 ---
 
-## 4. Data model
+## 4. The naive design, and why it breaks
+
+```
+On feed load:
+  SELECT post_id FROM posts
+   WHERE author_id IN (SELECT followee_id FROM follows WHERE follower_id = ?)
+   ORDER BY created_at DESC LIMIT 20
+```
+
+One query, no precomputation, no staleness, no fan-out workers. It is the **pull model**,
+and for a small social app it is genuinely the right answer — say that, because a candidate
+who reaches for Kafka on a 10 K-user product is also failing the interview.
+
+It breaks at the scale in §2:
+
+| What breaks | The number that breaks it | Consequence |
+|---|---|---|
+| **Read amplification** | Average user follows ~200 accounts | Every feed load is a 200-way scatter, merge and sort — at 600 K peak QPS that's 120 M partition reads/s |
+| **Latency on the critical path** | p99 target < 200 ms | The merge is bounded by the *slowest* of 200 shard reads, so tail latency compounds instead of averaging out |
+| **Wasted work** | Reads outnumber writes 50:1 | The same merge is recomputed on every refresh even when nothing changed. You pay 50x for work whose answer didn't move |
+| **No cache purchase** | Feed is unique per user | You can't cache the *result* usefully at the edge, because no two users share a feed |
+
+**The fix and its own failure.** Invert it: precompute each user's timeline at write time
+(**push / fan-out-on-write**), so a read is one sequential fetch of an already-sorted list.
+That converts 50 reads of work into 1 write of work — correct for the 50:1 ratio.
+
+But push has a failure mode just as sharp: **one post by a 100 M-follower account becomes
+100 M writes.** A single celebrity tweet can saturate the entire fan-out fleet and delay
+every ordinary user's post behind it.
+
+So neither pure model survives, which is the actual thesis of this problem: **push for the
+long tail, pull for celebrities, merge at read time.**
+[§7](#7-deep-dive-fan-out-strategy) works through the choice and
+[§8](#8-the-celebrity-problem-in-depth) works through the celebrity case in detail.
+
+---
+
+## 5. Data model
 
 ```
 posts                (sharded KV / Cassandra)
@@ -97,7 +149,7 @@ social_graph_meta
 
 ---
 
-## 5. Architecture
+## 6. Architecture
 
 ```mermaid
 flowchart LR
@@ -130,13 +182,25 @@ flowchart LR
 Relay publishes `PostCreated` → fan-out workers push the post ID into each
 non-celebrity follower's Redis timeline.
 
+**Why an outbox instead of publishing to Kafka directly?** Writing the post to the DB and
+publishing the event are two systems, and there is no atomic operation across them. If
+you publish first and the DB write fails, followers see a post that doesn't exist; if you
+write first and the publish fails, the post exists but never reaches a single timeline —
+and the author sees their own post while nobody else ever does, which is the harder bug to
+detect. Writing the post and an `outbox` row in **one local transaction** makes the event
+as durable as the post itself; a relay then tails the outbox and publishes at-least-once.
+Fan-out is idempotent (pushing the same post ID into a timeline is a set operation), so
+a duplicate publish is harmless. Same reasoning as the outbox in
+[payments](10-payment-system.md) — the difference is that here a lost event costs
+engagement, not money.
+
 **Read path:** fetch `timeline:{user}` IDs from Redis → fetch the user's followed
 celebrities' recent post IDs → merge-sort by post ID (time-sortable) → take top 20 →
 hydrate content from the post cache → return.
 
 ---
 
-## 6. Deep dive: fan-out strategy
+## 7. Deep dive: fan-out strategy
 
 ![Fan-out on write vs on read vs hybrid](../assets/fanout-push-pull.svg)
 
@@ -172,12 +236,12 @@ flowchart TD
 
 ---
 
-## 7. The celebrity problem, in depth
+## 8. The celebrity problem, in depth
 
 Saying "I'll use a hybrid" is where most candidates *stop*. It is where a good
 interviewer *starts*. Every question below is one you should expect.
 
-### 7.1 Why it's actually a problem — put numbers on it
+### 8.1 Why it's actually a problem — put numbers on it
 
 ```
 Ordinary user:  200 followers      -> 200 timeline writes per post. Invisible.
@@ -200,7 +264,7 @@ Two distinct failures, and you should name both:
    argument for isolating celebrity traffic onto its own worker pool/queue even before
    you decide to skip fan-out.
 
-### 7.2 "Why 100 K? What about a user with 99,999 followers?"
+### 8.2 "Why 100 K? What about a user with 99,999 followers?"
 
 The honest answer: **the threshold is not a property of the user, it's a cost
 comparison**, and you should derive it rather than assert it.
@@ -222,7 +286,7 @@ Practical consequences worth stating:
 - A cleaner formulation: rank accounts by `followers x post_rate` and treat the top
   N accounts as celebrities, so a low-follower/high-frequency bot is also caught.
 
-### 7.3 The transition problem (the question that catches people out)
+### 8.3 The transition problem (the question that catches people out)
 
 An account crosses the threshold. Its old posts were **pushed** into timelines; its new
 posts are **pulled**. Now:
@@ -244,7 +308,7 @@ Fixes to state explicitly:
   reader always knows whether a given post is already in their timeline. This turns an
   ambiguous global question into a per-post fact.
 
-### 7.4 The read side has its own celebrity problem
+### 8.4 The read side has its own celebrity problem
 
 Hybrid moves cost from write to read — so bound the read.
 
@@ -262,7 +326,7 @@ Twitter). Mitigations:
 - **Cache the merged result** per reader for a few seconds. During a spike, thousands of
   readers of the same celebrity produce identical merges.
 
-### 7.5 It's really a per-(author, reader) decision
+### 8.5 It's really a per-(author, reader) decision
 
 The sharpest version of the answer: push/pull isn't a property of the author at all.
 It's a property of the **edge**.
@@ -279,7 +343,7 @@ else pulls. This "**partial fan-out**" is what real systems converge on, and off
 unprompted is a strong senior signal — it shows you see the binary as a simplification
 rather than a rule.
 
-### 7.6 Celebrity post storage
+### 8.6 Celebrity post storage
 
 ```
 celeb_recent:{author_id}   Redis ZSET, score = post_id (time-sortable)
@@ -290,7 +354,7 @@ with a 1–2 s TTL in the Feed Service. With 500 feed instances that caps Redis 
 one celebrity at ~500/s no matter how viral the post is. Same hot-key move as the URL
 shortener.
 
-### 7.7 What to measure
+### 8.7 What to measure
 
 If you can't detect it, you can't tune the threshold:
 
@@ -298,10 +362,10 @@ If you can't detect it, you can't tune the threshold:
 |---|---|
 | Fan-out lag p99, **broken down by author tier** | An aggregate lag number hides the celebrity tail entirely |
 | Fan-out writes/s attributed per author | Finds the noisy neighbour before it pages you |
-| Feed read latency vs *number of celebrities followed* | Detects the §7.4 read-side problem |
+| Feed read latency vs *number of celebrities followed* | Detects the §8.4 read-side problem |
 | Count of accounts near the threshold | Predicts flapping and cost cliffs |
 
-### 7.8 Rapid-fire probe answers
+### 8.8 Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|
@@ -315,7 +379,7 @@ If you can't detect it, you can't tune the threshold:
 
 ---
 
-## 8. Other deep dives
+## 9. Other deep dives
 
 ### Read-your-writes for the author
 The author must see their own post instantly even before fan-out completes. Fix: the
@@ -347,7 +411,7 @@ system degrades rather than fails. Warm the cache asynchronously afterwards.
 
 ---
 
-## 9. Failure modes
+## 10. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -360,7 +424,7 @@ system degrades rather than fails. Warm the cache asynchronously afterwards.
 
 ---
 
-## 10. Scale evolution
+## 11. Scale evolution
 
 - **10x reads:** more Redis capacity and app instances; add a per-instance L1 cache for
   hot posts; move media entirely to CDN.
@@ -372,7 +436,7 @@ system degrades rather than fails. Warm the cache asynchronously afterwards.
 
 ---
 
-## 11. Trade-offs summary
+## 12. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -387,9 +451,9 @@ system degrades rather than fails. Warm the cache asynchronously afterwards.
 
 ---
 
-## 12. Rapid-fire probe answers
+## 13. Rapid-fire probe answers
 
-Celebrity-specific probes are in [7.8](#78-rapid-fire-probe-answers). These cover the rest.
+Celebrity-specific probes are in [8.8](#88-rapid-fire-probe-answers). These cover the rest.
 
 | Probe | Answer |
 |---|---|

@@ -61,7 +61,114 @@ Webhooks: PSPs retry aggressively; expect ~3x the payment count in inbound callb
 
 ---
 
-## 3. The double-entry ledger
+## 3. Core entities & API
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **Account** | A named bucket money can sit in: merchant balance, customer, fees, PSP float, reserve | Accounts include *internal* ones. Fees and float are accounts, not columns |
+| **PaymentIntent** | The customer's instruction to pay: amount, currency, method, merchant | Carries the state machine. Created before any money moves — that ordering is what makes retries safe |
+| **LedgerEntry** | One immutable debit or credit line: `(account, amount, direction, ref)` | Append-only. **A balance is a `SUM` of entries, never a mutable column** |
+| **Transaction** | A balanced set of ledger entries that must apply atomically | The invariant is `SUM(debits) == SUM(credits)` for every transaction, always |
+| **IdempotencyRecord** | `key → (request_hash, response, state)` | Turns "did my charge go through?" from a guess into a lookup |
+| **PSPEvent / Webhook** | An inbound provider notification, deduped by provider event ID | Arrives out of order, more than once, and sometimes before your own API response |
+| **Payout / Refund / Dispute** | Downstream money movements against an existing payment | Each is its own transaction, never an edit of the original |
+
+Two entity-level decisions carry the entire design. **`LedgerEntry` is immutable**, so
+corrections are new compensating entries rather than updates — that's what makes the
+system auditable. And **`PaymentIntent` is separate from the ledger entries it produces**,
+because an intent can be retried, fail, or land in an unknown state without ever having
+moved money.
+
+**Interface**
+
+```
+# Payments
+POST /v1/payment_intents          Idempotency-Key: <uuid>   # REQUIRED, not optional
+     { amount, currency, merchantId, paymentMethod, captureMode: auto|manual }
+     -> 201 { intentId, status, clientSecret }
+     -> 200 + the ORIGINAL response if the key was seen before
+     -> 409 if the key is reused with a different request body
+POST /v1/payment_intents/{id}/capture   Idempotency-Key: <uuid>
+POST /v1/payment_intents/{id}/cancel
+GET  /v1/payment_intents/{id}     -> { status, amount, ledgerTransactionId? }
+
+# Money movement after the fact
+POST /v1/refunds                  { paymentIntentId, amount }   Idempotency-Key: <uuid>
+GET  /v1/balances/{accountId}     -> { available, pending, currency }   # SUM over entries
+GET  /v1/ledger/entries?accountId=&from=&to=&cursor=            # the audit trail
+
+# Inbound from the PSP
+POST /webhooks/psp                Signature: <hmac>
+     -> 200 fast, always                    # verify signature, enqueue, ACK immediately
+```
+
+Three contract decisions to state before anyone asks:
+- **`Idempotency-Key` is required, and reusing it with a different body is a `409`.**
+  Silently returning the old response for a *different* request would let a client
+  accidentally suppress a real second charge.
+- **Balance is a read model, not a field.** The API exposes it, but it is computed from
+  ledger entries (with a materialised cache), so it can never drift from the audit trail.
+- **The webhook endpoint ACKs immediately and processes asynchronously.** PSPs retry
+  aggressively on slow responses, so doing work before the `200` converts a slow database
+  into a duplicate-event storm.
+
+---
+
+## 4. The naive design, and why it breaks
+
+```sql
+-- charge a customer
+BEGIN;
+  UPDATE accounts SET balance = balance - 100 WHERE id = 'customer';
+  UPDATE accounts SET balance = balance + 100 WHERE id = 'merchant';
+  INSERT INTO payments(id, amount, status) VALUES (?, 100, 'succeeded');
+COMMIT;
+-- then: psp.charge(card, 100)
+```
+
+A `balance` column, two updates, one transaction. It's ACID, it's fast, and it is wrong in
+ways that produce **money that cannot be accounted for** — which is a different category of
+bug from everything else in this repo:
+
+| What breaks | Why | Consequence |
+|---|---|---|
+| **Mutable balance** | The balance is a number, not a history | You can see that an account holds $340, but **not why**. There is no way to answer "where did this come from?" — and that question is a legal requirement, not a nice-to-have |
+| **No audit trail** | `UPDATE` destroys the previous value | A bug that mis-charges 10 K customers cannot be traced or reversed, because the evidence was overwritten |
+| **Unbalanced by construction** | Nothing enforces that debits equal credits | A crash or a bad code path between the two `UPDATE`s creates or destroys money. Fees and FX losses have nowhere to live, so they silently round away |
+| **Retry = double charge** | No idempotency | The customer taps Pay twice, or the client retries a timeout. Two charges, one angry customer, one chargeback |
+| **The DB and the PSP aren't one transaction** | The PSP is an external system | **The critical flaw.** If `psp.charge` succeeds but your `COMMIT` fails, the customer is charged and your system has no record. There is no distributed transaction available to you here |
+
+That last row is the one to lead with. You cannot make an external card network and your
+database commit atomically — no amount of transaction cleverness fixes it — so the design
+has to *assume* the two will disagree and make disagreement detectable and repairable.
+
+**Three reframes, and each is a section below:**
+
+1. **Balance is a `SUM`, not a column.** Record immutable double-entry `LedgerEntry` rows
+   and derive balances from them. Corrections become new compensating entries, so history
+   is never destroyed and `SUM(debits) == SUM(credits)` is a checkable invariant
+   ([§5](#5-the-double-entry-ledger)).
+2. **Idempotency is a stored record, not a convention.** A client-supplied key mapped to a
+   stored response turns "did my charge go through?" from a guess into a lookup
+   ([§6](#6-idempotency--the-single-most-important-mechanism)).
+3. **Write the intent before calling the PSP, and model `unknown` as a real state.** A
+   payment that timed out mid-call is neither succeeded nor failed, and a design that has
+   no state for it will guess — wrongly, at scale
+   ([§7](#7-payment-lifecycle-as-a-state-machine)). Reconciliation against the PSP's own
+   settlement file is what eventually resolves it.
+
+**The instinct to resist:** "split it into microservices with a distributed transaction /
+2PC across them." It trades away your single strongest asset — one ACID transaction on one
+database, which the volume in §3 comfortably supports — for coordination complexity that
+solves a scaling problem you don't have. Use a saga only where an external system is
+genuinely involved, and give it explicit compensations
+([§9](#why-not-microservice-per-step-with-distributed-transactions)).
+
+---
+
+## 5. The double-entry ledger
 
 This is the core of the design, and most candidates skip it.
 
@@ -99,7 +206,7 @@ breaks, that's a page-everyone incident.
 
 ---
 
-## 4. Idempotency — the single most important mechanism
+## 6. Idempotency — the single most important mechanism
 
 Networks time out. Users double-click. PSPs retry webhooks. Your own queue is
 at-least-once. **Every mutating operation must be safely repeatable.**
@@ -133,7 +240,7 @@ crosses their successful-but-unacknowledged response.
 
 ---
 
-## 5. Payment lifecycle as a state machine
+## 7. Payment lifecycle as a state machine
 
 ```mermaid
 stateDiagram-v2
@@ -173,7 +280,7 @@ production experience.
 
 ---
 
-## 6. Architecture
+## 8. Architecture
 
 ```mermaid
 flowchart LR
@@ -217,7 +324,7 @@ nothing", which is both a security and a cost argument.
 
 ---
 
-## 7. Data model
+## 9. Data model
 
 ```
 payments(payment_id PK, order_id, customer_id, amount_minor, currency,
@@ -240,7 +347,7 @@ is what makes webhook processing idempotent under the PSPs' aggressive retries.
 
 ---
 
-## 8. Deep dives
+## 10. Deep dives
 
 ### Reconciliation — the safety net that makes everything else survivable
 Every day the PSP publishes a settlement file of what they actually processed. A job
@@ -290,7 +397,7 @@ the right call; showing you choose per-system rather than by habit is the point.
 
 ---
 
-## 9. Failure modes
+## 11. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -305,7 +412,7 @@ the right call; showing you choose per-system rather than by habit is the point.
 
 ---
 
-## 10. Scale evolution
+## 12. Scale evolution
 
 - **10x volume (5 K TPS):** still comfortable for one primary with read replicas.
   First moves: batch ledger inserts, move reporting reads off the primary, partition
@@ -321,7 +428,7 @@ the right call; showing you choose per-system rather than by habit is the point.
 
 ---
 
-## 11. Trade-offs summary
+## 13. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -337,7 +444,7 @@ the right call; showing you choose per-system rather than by habit is the point.
 
 ---
 
-## 12. Rapid-fire probe answers
+## 14. Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|

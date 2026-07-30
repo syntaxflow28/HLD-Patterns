@@ -54,7 +54,20 @@ Key space: 62^7 = ~3.5 trillion -> 100 M/day for ~95 years. 7 chars is enough.
 
 ---
 
-## 3. API
+## 3. Core entities & API
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **Link** | The mapping itself: `shortKey → longUrl`, `expiresAt`, `ownerId`, `isActive` | The only entity on the redirect path — keep it small enough to cache entirely |
+| **Owner** | Optional account that created the link | Scopes quotas, custom aliases, and analytics access |
+| **ClickEvent** | One append-only record per redirect: time, country, referrer, UA class | Written asynchronously; **never** read on the hot path |
+
+The entity list is deliberately tiny, and that's the insight: this system is one hot
+lookup plus a firehose of write-only events, and those two belong in different stores.
+
+**Interface**
 
 ```
 POST /v1/urls
@@ -76,7 +89,44 @@ follow-up question.
 
 ---
 
-## 4. Key generation — the core design decision
+## 4. The naive design, and why it breaks
+
+Say this out loud first. It takes ninety seconds, it proves you can size a system, and it
+turns every later decision into a **response to a measured failure** rather than a pattern
+you recited.
+
+```
+One MySQL instance, one table:
+  urls(id BIGINT AUTO_INCREMENT PK, short_key VARCHAR(7), long_url TEXT, created_at)
+
+Create:   INSERT, then short_key = base62(id)
+Redirect: SELECT long_url WHERE short_key = ?   -> 302
+Analytics: INSERT INTO clicks(...) on every redirect
+```
+
+This is genuinely correct. It is also wrong in four independent ways, and the numbers from
+§2 tell you exactly where:
+
+| What breaks | The number that breaks it | Consequence |
+|---|---|---|
+| **Read throughput** | 350 K peak redirect QPS vs ~10-20 K QPS for one primary | Off by more than an order of magnitude. No amount of tuning closes a 20x gap |
+| **Storage** | 165 TB at 5 years with replication | Doesn't fit on one node, and the index stops fitting in RAM long before the data does |
+| **Sequential keys** | `base62(AUTO_INCREMENT)` | Keys are enumerable: a competitor can walk your entire corpus, and consecutive IDs leak your exact daily volume |
+| **Synchronous analytics** | 10 B click inserts/day on the redirect path | Doubles write load and puts a non-essential write in front of the user's redirect |
+
+Each fix is one of the sections that follows: obfuscated counter ranges kill the
+enumeration problem ([§5](#5-key-generation--the-core-design-decision)), a sharded KV store
+absorbs the storage ([§6](#6-data-model)), a cache in front of it absorbs the reads
+([§7](#7-architecture)), and analytics moves onto a queue.
+
+**The instinct to resist:** "just add read replicas." Replicas help, but 350 K QPS needs
+~20-30 of them, each carrying a full 165 TB copy, and they add replication lag to a system
+that promises read-your-writes. The hot set is 6 GB — caching is simply the better tool,
+and knowing *why* replicas are the wrong lever here is the point of the exercise.
+
+---
+
+## 5. Key generation — the core design decision
 
 ```mermaid
 flowchart TD
@@ -108,7 +158,7 @@ check the pool).
 
 ---
 
-## 5. Data model
+## 6. Data model
 
 ```
 Table urls            (KV store, e.g. DynamoDB / Cassandra)
@@ -128,7 +178,7 @@ interviewer wants to hear about shard key selection.
 
 ---
 
-## 6. Architecture
+## 7. Architecture
 
 ```mermaid
 flowchart LR
@@ -163,7 +213,7 @@ write-through to cache (gives immediate read-your-writes) → return.
 
 ---
 
-## 7. Deep dives
+## 8. Deep dives
 
 ### Cache strategy
 - **Cache-aside + write-through on create** so a new link is instantly redirectable.
@@ -195,7 +245,7 @@ at redirect time from a small in-memory set; rate limit creation per IP/account.
 
 ---
 
-## 8. Failure modes
+## 9. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -207,7 +257,7 @@ at redirect time from a small in-memory set; rate limit creation per IP/account.
 
 ---
 
-## 9. Scale evolution
+## 10. Scale evolution
 
 - **10x reads (3.5 M QPS):** push redirects to the CDN/edge for the top 1% of links
   (they serve the vast majority of traffic); edge KV (Cloudflare Workers KV) as a
@@ -221,7 +271,7 @@ at redirect time from a small in-memory set; rate limit creation per IP/account.
 
 ---
 
-## 10. Trade-offs summary
+## 11. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -234,7 +284,7 @@ at redirect time from a small in-memory set; rate limit creation per IP/account.
 
 ---
 
-## 11. Rapid-fire probe answers
+## 12. Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|

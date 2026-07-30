@@ -63,7 +63,53 @@ Device tokens: 500 M users x ~2 devices = 1 B tokens x ~200 B = ~200 GB
 
 ---
 
-## 3. Architecture
+## 3. The naive design, and why it breaks
+
+```python
+# in the request handler that triggered the notification
+for user in recipients:
+    if user.email: ses.send_email(user.email, subject, body)
+    if user.push_token: fcm.send(user.push_token, payload)
+    if user.phone: twilio.send_sms(user.phone, text)
+```
+
+Send synchronously, in a loop, inside the caller's request. Every failure below is real,
+and the last one is the one that gets you a postmortem:
+
+| What breaks | The number that breaks it | Consequence |
+|---|---|---|
+| **Synchronous send** | A campaign with 10 M recipients | The request times out long before the loop finishes, and the caller has no idea how far it got |
+| **No retry state** | Provider 500s and transient failures | Retrying the loop re-sends to everyone already delivered; not retrying drops them. With no per-recipient record you cannot tell which |
+| **Shared fate across channels** | One provider degraded | An SMS provider timing out at 30 s per call blocks the **push and email** for the same user. One vendor's bad day becomes your outage |
+| **Provider rate limits** | APNs/FCM/SES quotas | Dumping 10 M sends as fast as you can gets you throttled, then temporarily blocked — the provider protects itself from you |
+| **No preference check** | Unsubscribes, quiet hours | Sending to someone who opted out is a legal problem, not a bug report |
+| **Bulk starves transactional** | 500 M/day, mostly marketing | **The failure that matters.** A password-reset email queues behind 10 M marketing sends and arrives 40 minutes later, by which time the user has churned |
+
+That last row is why this system exists at all. Notifications look like one problem but are
+two with **opposite** requirements: transactional messages are low-volume and latency-
+critical, bulk messages are high-volume and latency-tolerant. Put them in one queue and
+the high-volume one always wins, because queues are fair and your users aren't.
+
+**Three reframes:**
+
+1. **Accept fast, deliver asynchronously.** The API's job is to durably record an *intent*
+   and return; delivery is a separate, retryable pipeline.
+2. **Isolate by priority and by channel.** Separate topics for transactional vs bulk, and
+   separate consumers per channel, so no queue and no vendor can starve another
+   ([§4](#4-architecture)).
+3. **Delivery is per-recipient-per-channel state, not a loop iteration.** Once each attempt
+   is a durable row, retries, failover, dedup and "why didn't I get it?" all become
+   answerable ([§6](#6-the-processing-pipeline)).
+
+**The instinct to resist:** "just put it all on one queue with a priority field." Priority
+queues sound like the fix, but a single consumer pool still shares connections, provider
+rate-limit budgets and failure modes — so a bulk backlog still delays transactional traffic
+through the back door. Physical isolation beats logical priority when the whole point is
+blast-radius containment.
+
+---
+
+## 4. Architecture
 
 ```mermaid
 flowchart LR
@@ -100,7 +146,22 @@ remember one thing about this problem, remember this.
 
 ---
 
-## 4. API
+## 5. Core entities & API
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **NotificationRequest** | The inbound intent: user, category, template, data, priority | Deduped by `Idempotency-Key`; it is a *request* to notify, not a guarantee of delivery |
+| **UserPreferences** | Per user per category: allowed channels, quiet hours, unsubscribes | Consulted before **every** send; an unsubscribe that isn't honoured is a legal problem |
+| **Template** | Versioned, one variant per channel, rendered with the request's `data` | Versioning lets you roll back a bad copy change without a deploy |
+| **DeliveryAttempt** | One row per `(notification, channel, provider)` try, with status and provider message ID | The unit of retry, of provider failover, and of the audit trail |
+| **Address / DeviceToken** | Push tokens, email addresses, phone numbers per user | Invalidated by provider feedback loops — dead tokens must be pruned or they poison delivery rates |
+
+One notification request fans out into several delivery attempts across channels and
+retries. Keeping those as separate entities is what makes per-channel isolation possible.
+
+**Interface**
 
 ```
 POST /v1/notifications                         Idempotency-Key: <uuid>
@@ -132,7 +193,7 @@ delivered. Expired items are dropped, not retried forever.
 
 ---
 
-## 5. The processing pipeline
+## 6. The processing pipeline
 
 ```mermaid
 flowchart TD
@@ -164,7 +225,7 @@ Each of these gates exists because of a real production failure:
 
 ---
 
-## 6. Data model
+## 7. Data model
 
 ```
 device_tokens(user_id, device_id) PK, platform, token, app_version,
@@ -188,7 +249,7 @@ frequency caps/dedup are per user.
 
 ---
 
-## 7. Deep dives
+## 8. Deep dives
 
 ### Campaign fan-out: 50 M users in 30 minutes
 Do **not** enqueue 50 M individual messages from one process.
@@ -235,7 +296,7 @@ it's both a UX win and a large cost saving on SMS/push volume.
 
 ---
 
-## 8. Failure modes
+## 9. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -249,7 +310,7 @@ it's both a UX win and a large cost saving on SMS/push volume.
 
 ---
 
-## 9. Scale evolution
+## 10. Scale evolution
 
 - **10x volume:** add partitions and consumers per channel queue; the design is already
   shared-nothing per user. The real ceiling is provider quota — negotiate it or add
@@ -265,7 +326,7 @@ it's both a UX win and a large cost saving on SMS/push volume.
 
 ---
 
-## 10. Trade-offs summary
+## 11. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -280,7 +341,7 @@ it's both a UX win and a large cost saving on SMS/push volume.
 
 ---
 
-## 11. Rapid-fire probe answers
+## 12. Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|

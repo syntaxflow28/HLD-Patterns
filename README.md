@@ -71,6 +71,10 @@ flowchart LR
 - [08 File sync (Dropbox)](03-case-studies/08-file-sync-storage.md) — sync & conflicts
 - [09 Notification system](03-case-studies/09-notification-system.md) — multi-channel fan-out
 - [10 Payment system & ledger](03-case-studies/10-payment-system.md) — transactional correctness
+- [11 Ad click event aggregation](03-case-studies/11-ad-click-aggregation.md) — stream processing
+- [12 Stock broker / trading app](03-case-studies/12-stock-broker.md) — transactional + real-time
+- [13 Real-time leaderboard](03-case-studies/13-leaderboard.md) — ranking at scale
+- [14 Pastebin](03-case-studies/14-pastebin.md) — KV + blob storage
 
 ### 04 — Cheatsheets
 - [01 Latency & capacity numbers](04-cheatsheets/01-numbers-and-estimation.md)
@@ -93,4 +97,4 @@ flowchart LR
 |---|---|
 | 1 | Playbook + Core concepts 01–06. Do estimation drills daily. |
 | 2 | Core concepts 07–12 + Patterns folder. Draw each diagram from memory. |
-| 3 | 1 case study per day (there are 10), timed at 45 min, out loud. Review cheatsheets before each. |
+| 3 | 1 case study per day (there are 14), timed at 45 min, out loud. Review cheatsheets before each. |

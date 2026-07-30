@@ -16,6 +16,10 @@
 | [08](08-file-sync-storage.md) | File sync (Dropbox) | Media + sync | Content-addressed blocks, delta sync, conflict resolution |
 | [09](09-notification-system.md) | Notification system | Fan-out | Channel isolation, dedup, provider failover, campaigns |
 | [10](10-payment-system.md) | Payment system & ledger | Transactional | Idempotency, double-entry ledger, sagas, reconciliation |
+| [11](11-ad-click-aggregation.md) | Ad click event aggregation | Stream processing | Event time & watermarks, exactly-once effect, late events, lambda |
+| [12](12-stock-broker.md) | Stock broker / trading app | Transactional + real-time | Order lifecycle, holds & buying power, tick conflation, market open burst |
+| [13](13-leaderboard.md) | Real-time leaderboard | Ranking | Sorted sets, score-range sharding, rank vs percentile, ties, windowed resets |
+| [14](14-pastebin.md) | Pastebin | KV + blob | Metadata/blob split, CDN for bandwidth, expiry & deletion, abuse handling |
 
 Read them in any order, but **01 → 02 → 03** first: they cover the three archetypes
 that appear most often as the *base* of a question. After that, pick by whichever
@@ -29,16 +33,14 @@ archetype you feel weakest in.
 | Distributed cache | Storage | Consistent hashing, eviction, replication |
 | Google Docs | Real-time | OT vs CRDT, presence, snapshots |
 | Search autocomplete | Search | Precomputed top-k, trie, edge caching |
-| Ad click aggregation | Metering | Stream processing, exactly-once effect, late events |
-| Metrics/monitoring system | Metering | Time-series storage, downsampling, cardinality |
+| Metrics/monitoring system | Metering | Time-series storage, downsampling, cardinality — closest to [11](11-ad-click-aggregation.md) |
 | Instagram / photo sharing | Media + feed | Blob pipeline, feed, discovery |
-| Leaderboard | Metering | Redis sorted sets, sharded ranking, ties |
 | Distributed job scheduler | Coordination | At-least-once execution, leases, time buckets |
 | Yelp / proximity service | Geospatial | Static geo data vs the dynamic case in [05](05-ride-hailing.md) |
 | Key-value store | Storage | Quorum, gossip, Merkle trees, hinted handoff |
-| Stock exchange / order book | Transactional | Deterministic matching, sequencing, low latency |
+| Stock exchange / order book | Transactional | Deterministic matching, sequencing, low latency — the venue side of [12](12-stock-broker.md) |
 
-Most of these are recombinations of the ten worked studies. Before designing one from
+Most of these are recombinations of the fourteen worked studies. Before designing one from
 scratch, ask *"which worked study is this closest to, and what is genuinely different?"*
 
 ---
@@ -75,35 +77,50 @@ Copy this for every practice problem. Fill it in under 45 minutes.
 - Cache size (20% hot set)
 **Conclusions:** (what each number forces you to do)
 
-## 3. API
+## 3. Core entities & API
+List the 4-7 nouns the system is about, before designing anything:
+Entity — what it is — is it durable or derived/ephemeral?
+(The durable-vs-derived split usually tells you the architecture.)
+
 POST/GET ... -> ...
 
-## 4. Data model
+## 4. The naive design, and why it breaks
+The design a competent engineer would build without the scale numbers — usually one table
+and one synchronous request path. Write it out honestly (pseudo-code or SQL), then:
+
+| What breaks | The number that breaks it | Consequence |
+
+Every row must cite a number from §2, not a vague "it won't scale".
+Then state the reframe(s): the shift in thinking each break forces, linking forward to the
+section that solves it. Finish with **the instinct to resist** — the plausible-but-wrong
+fix ("add a cache", "wrap it in a transaction", "add an index") and precisely why it fails.
+
+## 5. Data model
 Entity(pk, fields) — access patterns — store choice — index/shard key
 
-## 5. High-level architecture
+## 6. High-level architecture
 ```mermaid
 flowchart LR
 ```
 Narrate the write path, then the read path.
 
-## 6. Deep dives
+## 7. Deep dives
 - Hardest sub-problem + 2 alternatives + choice + trade-off
 - Bottleneck + fix
 - Failure modes: node / AZ / region / dependency / hot key
 - Consistency model per data type
 
-## 7. Scale evolution
+## 8. Scale evolution
 10x: what breaks, what changes
 100x: what breaks, what changes
 
-## 8. Operations
+## 9. Operations
 Metrics · SLOs · alerts · deploy · migration
 
-## 9. Trade-offs summary
+## 10. Trade-offs summary
 | Decision | Chose | Alternative | Why |
 
-## 10. Rapid-fire probe answers
+## 11. Rapid-fire probe answers
 | Probe | Answer |
 (write the 8-12 questions an interviewer would push back with, and a one-line
 defence for each — this is the part you actually get graded on)

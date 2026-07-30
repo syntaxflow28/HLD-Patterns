@@ -52,7 +52,20 @@ Fan-out: 1:1 = 1 recipient; groups of 500 -> a group message = 500 deliveries.
 
 ---
 
-## 3. API
+## 3. Core entities & API
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **User / Device** | A user has several connected devices | Delivery is tracked per **device**, read state per **user** — conflating the two breaks multi-device |
+| **Conversation** | 1:1 or group thread | Owns the message sequence; it is the unit of ordering and of partitioning |
+| **Message** | `(conversationId, seq)` + body, sender, `clientMsgId` | Immutable. `seq` is server-assigned, which is where ordering comes from |
+| **Membership** | Who belongs to a conversation | The fan-out target list |
+| **DeliveryState** | Per `(user, conversation)`: `lastDeliveredSeq`, `lastReadSeq` | Receipts and unread counts are **derived** from two integers, not stored per message |
+| **Connection** | Ephemeral binding of device → gateway node | Soft state with a TTL; lost on reconnect and rebuilt in seconds |
+
+**Interface**
 
 ```
 WebSocket  wss://chat.example.com/v1/connect?token=...
@@ -72,7 +85,44 @@ create a duplicate message.
 
 ---
 
-## 4. Data model
+## 4. The naive design, and why it breaks
+
+```
+Send:    POST /messages          -> INSERT INTO messages
+Receive: GET /messages?since=X   -> polled every 2 seconds
+Order:   ORDER BY client_timestamp
+```
+
+HTTP polling over a single relational table. It works, it's trivially debuggable, and it's
+what every chat app starts as. At the scale in §2 it fails in four distinct ways — and
+notice that only the first is about throughput:
+
+| What breaks | The number that breaks it | Consequence |
+|---|---|---|
+| **Polling cost** | 50 M concurrent users ÷ 2 s | 25 M requests/s, almost all returning "nothing new". You pay full request cost for an empty answer |
+| **Latency floor** | 2 s poll interval | Average delivery latency is ~1 s against a target of 200 ms. Shortening the interval multiplies the cost above linearly |
+| **Ordering** | `ORDER BY client_timestamp` | Client clocks are skewed, wrong, and **user-settable**. Two users see the same conversation in different orders, and a user with a bad clock can pin their message to the top forever |
+| **Storage** | 100 B messages/day, ~15 TB/day | Not a single-table problem. And the natural query — "last 50 in this conversation" — needs a partitioned, clustering-ordered store, not a B-tree scan |
+
+**Two fixes, and the new problem each creates.**
+
+1. **Replace polling with WebSockets.** Delivery becomes push, latency drops to the network
+   round trip, and idle users cost almost nothing. The new problem: connections are
+   **stateful**. A message for user B must reach the specific gateway node holding B's
+   socket, so you now need a connection registry and a routing hop
+   ([§6](#6-architecture), [§9](#9-deep-dive-connections--presence)).
+2. **Replace client timestamps with a server-assigned per-conversation sequence.** Order
+   becomes total and undisputed. The new problem: **something must assign that sequence**,
+   which means one writer per conversation — which is exactly why the conversation, not the
+   user, is the partition key ([§7](#7-deep-dive-ordering)).
+
+That second one is the heart of the problem. Nearly every hard question in chat — ordering,
+dedup, resumable history, unread counts — dissolves once a monotonic per-conversation `seq`
+exists, and none of them are solvable without it.
+
+---
+
+## 5. Data model
 
 ```
 messages_by_conversation                (Cassandra)
@@ -107,9 +157,25 @@ Cassandra experience.
 Storing `last_read_seq` per user instead of a read flag per message turns O(messages)
 state into O(1) — a great optimization to volunteer.
 
+**Why Redis for the connection registry:** it is read on **every** message delivery to
+find the recipient's gateway, so it must be a sub-millisecond point lookup. It is also
+pure soft state — if it is lost, clients reconnect and repopulate it within seconds — so
+durability buys nothing and TTL-based expiry is exactly the semantics needed for dead
+connections. Keeping it in each gateway's local memory instead would work only if every
+gateway knew every other gateway's connections, which is the same shared state with more
+gossip.
+
+**Why the mailbox can be either Redis or Cassandra:** the choice follows retention. If
+offline messages are held for minutes to hours before a device reconnects, Redis with a
+TTL is enough and cheaper to operate. If the product promises multi-day offline delivery
+(or the mailbox must survive a cache flush), it has to be Cassandra — an evicted Redis
+key there is a permanently lost message. Pick Cassandra when the mailbox is a delivery
+guarantee, Redis when it is a convenience buffer, and say which one the requirements
+imply.
+
 ---
 
-## 5. Architecture
+## 6. Architecture
 
 ```mermaid
 flowchart LR
@@ -152,7 +218,7 @@ streams everything after that → no gaps, no duplicates.
 
 ---
 
-## 6. Deep dive: ordering
+## 7. Deep dive: ordering
 
 ```mermaid
 flowchart TD
@@ -174,7 +240,7 @@ Global cross-conversation ordering is neither needed nor achievable — say so.
 
 ---
 
-## 7. Deep dive: delivery guarantees
+## 8. Deep dive: delivery guarantees
 
 ```mermaid
 sequenceDiagram
@@ -201,7 +267,7 @@ sequenceDiagram
 
 ---
 
-## 8. Deep dive: connections & presence
+## 9. Deep dive: connections & presence
 
 **Gateway scaling:** each node holds ~100 K connections. Sizing is by memory and file
 descriptors, not CPU. Use L4 load balancing (L7 adds no value for a long-lived socket)
@@ -219,7 +285,7 @@ UI**. Last-seen is written on disconnect with a debounce.
 
 ---
 
-## 9. Failure modes
+## 10. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -232,7 +298,7 @@ UI**. Last-seen is written on disconnect with a debounce.
 
 ---
 
-## 10. Scale evolution & extensions
+## 11. Scale evolution & extensions
 
 - **10x connections:** gateways scale linearly; the registry becomes the bottleneck →
   shard Redis by user ID and cache the mapping at the delivery service.
@@ -248,7 +314,7 @@ UI**. Last-seen is written on disconnect with a debounce.
 
 ---
 
-## 11. Trade-offs summary
+## 12. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -262,7 +328,7 @@ UI**. Last-seen is written on disconnect with a debounce.
 
 ---
 
-## 12. Rapid-fire probe answers
+## 13. Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|

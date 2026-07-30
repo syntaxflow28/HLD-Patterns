@@ -59,7 +59,100 @@ Transcoding compute:
 
 ---
 
-## 3. Upload path
+## 3. Core entities & API
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **Video** | The logical asset: title, description, owner, visibility, status | What a user thinks they uploaded. Exists long before it is playable |
+| **Upload** | A resumable upload session: `uploadId`, target URL, received byte ranges | Separate from `Video` because uploads fail, resume, and get abandoned |
+| **Rendition** | One `(resolution, codec, bitrate)` output — `1080p/h264`, `720p/av1` | The unit of transcoding work and of storage cost. One video fans out to ~10 |
+| **Segment** | A few seconds of one rendition, plus its keyframe boundary | **Independently transcodable and independently cacheable** — this one entity is why both the pipeline and the CDN scale |
+| **Manifest** | HLS/DASH playlist listing renditions and segment URLs | What the player actually fetches first; ABR switching happens entirely inside it |
+| **ViewEvent** | Append-only playback telemetry: position, buffer, bitrate, errors | Massive volume, write-only, never on the playback path |
+
+**Segment is the entity that does the work.** Because segments are keyframe-aligned and
+immutable, transcoding parallelises across a fleet, players switch bitrate mid-stream, and
+every byte is cacheable forever at the edge. If you name only one entity, name that one.
+
+**Interface**
+
+```
+# Upload (bytes never pass through the API tier)
+POST /v1/videos                   { title, description, visibility }
+     -> 201 { videoId, uploadUrl, uploadId }      # pre-signed, resumable
+PUT  <uploadUrl>                  Content-Range: bytes 0-8388607/524288000
+POST /v1/videos/{id}/complete     { uploadId }
+     -> 202 { status: "processing" }              # transcoding is async
+
+# Status & playback
+GET  /v1/videos/{id}
+     -> { status: uploading|processing|ready|failed,
+          availableRenditions: [...], manifestUrl, thumbnailUrl }
+GET  /v1/videos/{id}/manifest.m3u8               # CDN-cached, short TTL
+GET  <cdn>/{videoId}/{rendition}/{segment}.ts    # CDN-cached, immutable, long TTL
+
+# Telemetry (batched, fire-and-forget)
+POST /v1/videos/{id}/events   { sessionId, events: [{ t, position, bitrate, buffer }] }
+     -> 202
+```
+
+The interface encodes three of the design's core decisions before you've drawn a single
+box:
+- **`uploadUrl` is pre-signed** — multi-GB bodies go straight to object storage.
+- **`complete` returns `202 processing`, not `200 ready`** — transcoding takes minutes, so
+  the API must expose an asynchronous lifecycle rather than pretend it's instant.
+- **Manifest and segments have opposite cache TTLs** — the manifest changes as renditions
+  publish progressively; segments never change, so they're immutable and cached forever.
+
+---
+
+## 4. The naive design, and why it breaks
+
+```
+Upload:   POST /videos (multipart, 5 GB body) -> app server -> write to S3
+Store:    the original MP4, as uploaded, one file
+Playback: <video src="https://s3.../original.mp4">
+```
+
+Store what you were given, serve it back. Every failure below is a *different* reason this
+can't work, which is why this problem decomposes into a pipeline rather than a single fix:
+
+| What breaks | The number that breaks it | Consequence |
+|---|---|---|
+| **Upload through the app tier** | 5 GB bodies, 500 K uploads/day | Each upload pins a connection and buffers gigabytes; app servers become stateful and can't be redeployed without killing uploads |
+| **One rendition for everyone** | A 4K source vs a phone on 3 Mbps mobile | The phone must download 25 Mbps of video over a 3 Mbps link. It buffers forever, and there is nothing lower to fall back to |
+| **No adaptive switching** | Bandwidth varies *during* playback | A single file has one bitrate. When the network degrades mid-video the only options are stall or stop — you cannot switch down |
+| **Serving from origin** | ~150 PB/day egress | Object-storage egress at that volume is financially absurd, and a viewer 300 ms away gets 300 ms added to every seek |
+| **Serial transcoding** | A 2-hour 4K source | Transcoding on one machine to one output takes hours. Multiply by ~10 renditions and publishing takes a day |
+
+**The unlock is one entity: the segment.** Cut the video into a few seconds of
+**keyframe-aligned** footage, and every problem above becomes tractable at once — which is
+rare enough that it's worth naming explicitly:
+
+- Segments transcode **independently and in parallel**, so a 2-hour video finishes in
+  minutes on a fleet instead of hours on a box ([§6](#6-transcoding-pipeline--the-heart-of-the-system)).
+- Because segment boundaries are identical across renditions, a player can **switch
+  bitrate between segments** mid-stream — that's all adaptive bitrate is ([§7](#7-playback-path)).
+- Segments are **immutable**, so they cache at the edge forever, which is what makes CDN
+  delivery both cheap and correct.
+- Playback can start as soon as the *first* segments of *one* rendition are ready, rather
+  than waiting for the whole pipeline.
+
+And uploads bypass the app tier entirely via pre-signed URLs, so bytes never touch a
+server you have to operate.
+
+**The instinct to resist:** "transcode on demand, per viewer." It sounds efficient — no
+storage for renditions nobody watches. But view counts follow a power law: a popular video
+would be transcoded thousands of times to serve the same bytes, and the first viewer of
+every video waits for an encoder. Pre-transcoding trades cheap storage for expensive CPU
+and latency, which is the right direction. Reserve on-demand transcoding for the long tail
+of rarely watched, rarely re-encoded formats.
+
+---
+
+## 5. Upload path
 
 ```mermaid
 sequenceDiagram
@@ -91,7 +184,7 @@ Key points:
 
 ---
 
-## 4. Transcoding pipeline — the heart of the system
+## 6. Transcoding pipeline — the heart of the system
 
 ```mermaid
 flowchart LR
@@ -130,7 +223,7 @@ Design points:
 
 ---
 
-## 5. Playback path
+## 7. Playback path
 
 ```mermaid
 flowchart LR
@@ -173,7 +266,7 @@ is saved.
 
 ---
 
-## 6. Data model
+## 8. Data model
 
 ```
 videos(video_id PK, uploader_id, title, description, status, duration,
@@ -192,7 +285,7 @@ which is exactly what real products do ("1.2 M views"). This is the same
 
 ---
 
-## 7. Deep dives
+## 9. Deep dives
 
 ### Why is time-to-first-frame the metric?
 Startup delay correlates directly with abandonment. It's driven by DNS + TLS +
@@ -223,7 +316,7 @@ at write time to make every read cheap.
 
 ---
 
-## 8. Failure modes
+## 10. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -237,7 +330,7 @@ at write time to make every read cheap.
 
 ---
 
-## 9. Scale evolution
+## 11. Scale evolution
 
 - **10x viewers:** almost entirely a CDN capacity/peering problem, not an application
   problem. That decoupling is the point of the design.
@@ -251,7 +344,7 @@ at write time to make every read cheap.
 
 ---
 
-## 10. Trade-offs summary
+## 12. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -266,7 +359,7 @@ at write time to make every read cheap.
 
 ---
 
-## 11. Rapid-fire probe answers
+## 13. Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|

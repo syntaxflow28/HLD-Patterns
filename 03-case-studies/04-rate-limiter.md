@@ -55,7 +55,89 @@ If every check is a network round trip to Redis:
 
 ---
 
-## 3. Algorithm choice
+## 3. Core entities & interface
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **Rule** | A limit definition: `(scope, matcher, limit, window, burst, action)` — e.g. `1000/min per api_key on /v1/*` | Lives in config, hot-reloaded. **Never** read from a database on the request path |
+| **Key** | The identity a rule is counted against: API key, user ID, IP, tenant, or a composite | Choosing the key is the actual product decision; per-IP and per-user protect against completely different abuse |
+| **Bucket / Counter** | The state for one `(rule, key)`: `(tokens, last_refill)` for token bucket | ~100 B, memory-resident, ephemeral, rebuildable. This is why Redis is acceptable and a durable DB is not |
+| **Decision** | The per-request verdict: `allow` \| `deny`, plus `remaining` and `retry_after` | Not persisted — it's a return value, though it is emitted as a metric |
+
+The entity list makes the central trade-off obvious: **the only durable entity is the
+Rule.** Counters are disposable, which is exactly what permits local in-process state
+with lazy reconciliation instead of a synchronous round trip per request.
+
+**Interface**
+
+This system is called in-process on every request, so its primary interface is a function,
+not an endpoint — and saying that upfront prevents the common mistake of designing a
+"rate limiting service" that everything makes a network call to.
+
+```
+# Hot path (in-process library / sidecar call)
+check(keys: [{scope, value}], route, cost = 1)
+  -> { allowed: bool, rule_id, limit, remaining, retry_after_ms }
+
+# Control plane (rare, not on the request path)
+PUT    /v1/rules/{id}   { scope, matcher, limit, window, burst, action, mode }
+         mode = enforce | shadow          # shadow logs what WOULD have been blocked
+GET    /v1/rules
+DELETE /v1/rules/{id}
+GET    /v1/keys/{key}/status              # debugging: current tokens, next refill
+```
+
+`cost` exists so an expensive endpoint can consume several tokens from the same bucket —
+it lets one rule express "1000 cheap calls **or** 100 expensive ones" without a second
+rule. The client-facing HTTP contract for a denial is in
+[§9](#9-response-contract).
+
+---
+
+## 4. The naive design, and why it breaks
+
+```
+On every request, in the gateway:
+  key   = "rl:" + api_key + ":" + current_minute
+  count = REDIS.INCR(key)
+  if count == 1: REDIS.EXPIRE(key, 60)
+  if count > limit: return 429
+```
+
+A fixed-window counter in one shared Redis. Six lines, correct on a good day, and shipped
+in production at thousands of companies. It breaks in four ways, and the fourth is the one
+that actually takes sites down:
+
+| What breaks | The number that breaks it | Consequence |
+|---|---|---|
+| **Op throughput** | 2 M counter ops/s vs ~100 K ops/s per Redis node | Needs ~20 nodes doing nothing but counting, and every one is on the critical path |
+| **Added latency** | +0.5-1 ms per round trip against a **p99 budget of 2 ms** | The limiter consumes a third to a half of the entire latency budget of the thing it protects |
+| **Boundary burst** | Fixed window | A client sending `limit` at 11:59:59 and `limit` at 12:00:00 gets **2x the limit in one second** and is technically within the rules |
+| **Availability inversion** | Redis is now a hard dependency of every request | The limiter becomes **less available than the service it protects** — a Redis blip becomes a total outage. This is the failure that matters |
+
+That last row is the whole problem restated: you added a component to improve
+reliability and made reliability strictly worse. Any design that leaves a synchronous
+network call on the request path has this defect no matter how fast the datastore is.
+
+**The fix, and what it costs.** Move the decision **into the process** — each node keeps
+local buckets and reconciles with Redis asynchronously every ~100 ms. Latency drops to a
+memory read, Redis load drops from "per request" to "per key per interval", and a Redis
+outage degrades accuracy instead of causing an outage.
+
+The price is that the count is now **approximate**: N nodes can each overshoot by up to
+one sync interval's worth of traffic. You must be able to quote that error bound rather
+than wave at it — [§6](#6-the-distributed-counting-problem) does the arithmetic.
+
+**The instinct to resist:** "give each node `limit / N`." It needs no coordination at all,
+which is why it's tempting — and it's wrong, because load balancers aren't perfectly fair
+and `N` silently changes on every deploy and autoscale event, so the effective limit
+changes with your fleet size.
+
+---
+
+## 5. Algorithm choice
 
 ![Rate limiting algorithms: token bucket, fixed window, sliding window](../assets/rate-limiting.svg)
 
@@ -84,7 +166,7 @@ attempts).
 
 ---
 
-## 4. Where does it run?
+## 6. Where does it run?
 
 ```mermaid
 flowchart TD
@@ -106,7 +188,7 @@ is a senior-level answer.
 
 ---
 
-## 5. The distributed counting problem
+## 7. The distributed counting problem
 
 N gateway nodes share one logical limit. Three options:
 
@@ -146,7 +228,7 @@ interval that is a fraction of a percent — and you say exactly that number out
 
 ---
 
-## 6. Architecture
+## 8. Architecture
 
 ```mermaid
 flowchart LR
@@ -173,7 +255,7 @@ option C.
 
 ---
 
-## 7. Response contract
+## 9. Response contract
 
 ```
 429 Too Many Requests
@@ -190,7 +272,7 @@ longer (progressive penalty).
 
 ---
 
-## 8. Deep dives
+## 10. Deep dives
 
 ### Fail open or fail closed?
 When Redis is unreachable:
@@ -229,7 +311,7 @@ Version rules and support a **dry-run / shadow mode** so you can see what a new 
 
 ---
 
-## 9. Failure modes
+## 11. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -242,7 +324,7 @@ Version rules and support a **dry-run / shadow mode** so you can see what a new 
 
 ---
 
-## 10. Scale evolution
+## 12. Scale evolution
 
 - **10x traffic:** local buckets already absorb it — Redis load grows with *distinct
   keys*, not with request volume. That decoupling is the main benefit of design C.
@@ -255,7 +337,7 @@ Version rules and support a **dry-run / shadow mode** so you can see what a new 
 
 ---
 
-## 11. Trade-offs summary
+## 13. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -268,7 +350,7 @@ Version rules and support a **dry-run / shadow mode** so you can see what a new 
 
 ---
 
-## 12. Rapid-fire probe answers
+## 14. Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|

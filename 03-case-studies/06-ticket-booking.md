@@ -60,7 +60,22 @@ Seat map payload: 50 K seats x ~20 B = ~1 MB raw -> ~50 KB compressed/bitmapped
 
 ---
 
-## 3. API
+## 3. Core entities & API
+
+**Core entities**
+
+| Entity | What it is | Notes |
+|---|---|---|
+| **Event** | The show: venue, start time, on-sale time, seat-map version | On-sale time is what creates the entire contention problem |
+| **Seat** | One row per physical seat with a status (`available` / `held` / `sold`) | **The contended resource.** Everything hard in this design is about this one status field |
+| **Hold** | A durable reservation row: `(seatIds, userId, expiresAt)` | This *is* the locking mechanism — a row with a TTL, not a lock primitive |
+| **Booking** | The confirmed purchase after payment succeeds | Immutable; generates tickets. Separate from `Hold` because payment can fail |
+| **QueueToken** | Admission-control artefact granting the right to *attempt* a purchase | Lets you throttle demand before it reaches the seat rows |
+
+The `Hold` / `Booking` split is the entity-level expression of the whole design: a hold is
+tentative and expires by itself, a booking is permanent and requires money to have moved.
+
+**Interface**
 
 ```
 GET  /v1/events/{id}                       -> event metadata (CDN-cached, minutes)
@@ -80,7 +95,48 @@ and a duplicate booking here means a duplicate charge.
 
 ---
 
-## 4. The waiting room (admission control)
+## 4. The naive design, and why it breaks
+
+```sql
+BEGIN;
+  SELECT * FROM seats WHERE id IN (...) AND status = 'available' FOR UPDATE;
+  -- user is redirected to the payment page here...
+  -- ...and we wait 30 seconds to 3 minutes for the card to clear
+  UPDATE seats SET status = 'sold', booking_id = ? WHERE id IN (...);
+COMMIT;
+```
+
+`SELECT ... FOR UPDATE` is the textbook answer to "two people must not buy the same seat",
+and for a low-traffic booking system it is completely correct. Here it is a self-inflicted
+outage:
+
+| What breaks | The number that breaks it | Consequence |
+|---|---|---|
+| **Transaction duration** | Payment takes 30 s-3 min; a healthy OLTP transaction is single-digit ms | The transaction is held open **10,000x longer** than the database was designed for |
+| **Connection exhaustion** | 100 K users at on-sale vs a few hundred DB connections | Every waiting user pins a connection *and* a transaction. The pool is gone in under a second, and now **unrelated queries fail too** |
+| **Lock convoy** | One popular seat block, thousands of concurrent buyers | Everyone queues on the same rows. Throughput collapses toward zero exactly when demand peaks |
+| **User abandons the page** | No timeout on a held lock | The lock lives until the transaction dies. A closed laptop can hold a seat until a connection timeout fires |
+
+**The reframe:** the thing you need is not a *lock*, it's a **reservation with an expiry**
+— a business concept, not a database primitive. Locks are held by a connection and die with
+it; a reservation is a durable row with an `expires_at` that survives a crash, is visible
+to support staff, and can be shown to the user as "5:00 remaining".
+
+So the seat hold becomes a **row, not a lock**
+([§6](#6-seat-locking--the-core-mechanism)), and the transaction that creates it is
+milliseconds long — it writes a hold and commits, and payment happens entirely outside any
+transaction.
+
+**The instinct to resist:** "use a Redis distributed lock per seat instead." It's fast and
+it has a natural TTL, which makes it look like the perfect fit. But Redis locks are **not
+durable** — a failover or split-brain loses them, and the failure mode is selling the same
+seat twice, then refunding a customer who is already at the venue. The one thing this
+system cannot do is oversell, so the hold must be durable
+([§9 Why not just "sell out of Redis"?](#why-not-just-sell-out-of-redis)).
+
+---
+
+## 5. The waiting room (admission control)
 
 ```mermaid
 sequenceDiagram
@@ -118,7 +174,7 @@ Design points to state:
 
 ---
 
-## 5. Seat locking — the core mechanism
+## 6. Seat locking — the core mechanism
 
 Four candidate approaches:
 
@@ -180,7 +236,7 @@ between services.
 
 ---
 
-## 6. Architecture
+## 7. Architecture
 
 ```mermaid
 flowchart LR
@@ -214,7 +270,7 @@ transaction.
 
 ---
 
-## 7. Data model
+## 8. Data model
 
 ```
 events(event_id PK, venue_id, starts_at, on_sale_at, status)          -- shard key
@@ -234,7 +290,7 @@ trample the mice.
 
 ---
 
-## 8. Deep dives
+## 9. Deep dives
 
 ### Why not just "sell out of Redis"?
 It is much faster, and some real systems do use an in-memory allocator per event. But a
@@ -267,7 +323,7 @@ process".
 
 ---
 
-## 9. Failure modes
+## 10. Failure modes
 
 | Failure | Behaviour |
 |---|---|
@@ -281,7 +337,7 @@ process".
 
 ---
 
-## 10. Scale evolution
+## 11. Scale evolution
 
 - **10x concurrent users on a drop:** the waiting room absorbs it — that's its entire
   purpose. Scale the queue (it's just a Redis list + token signing), not the database.
@@ -295,7 +351,7 @@ process".
 
 ---
 
-## 11. Trade-offs summary
+## 12. Trade-offs summary
 
 | Decision | Chose | Alternative | Why |
 |---|---|---|---|
@@ -309,7 +365,7 @@ process".
 
 ---
 
-## 12. Rapid-fire probe answers
+## 13. Rapid-fire probe answers
 
 | Probe | Answer |
 |---|---|
