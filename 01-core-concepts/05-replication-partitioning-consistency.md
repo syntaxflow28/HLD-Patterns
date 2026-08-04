@@ -125,6 +125,63 @@ flowchart TD
     style B2 fill:#f88,color:#000
 ```
 
+#### Why each property matters
+
+**1. High cardinality — can you split it at all?**
+
+A partition is the atomic unit of placement: every row sharing a key value *must* live
+on one node. So distinct values are a ceiling on shard count, and the largest value's
+row count is a floor on your largest partition.
+
+Shard 1B `orders` by `status` (`PENDING/SHIPPED/DELIVERED`) and 50 nodes buy you 3
+partitions — 47 idle, and `DELIVERED`'s ~950M rows pinned to one node with no seam to
+cut along. Same trap: `country`, `is_active`, `plan_tier`, `region`. Both limits are
+structural; no amount of hardware fixes them.
+
+**2. Even distribution — will load actually spread?**
+
+Cardinality counts the buckets; uniformity decides whether rows land in them evenly.
+You can pass (1) and still fail badly:
+
+| Key | Cardinality | Why it still fails |
+|---|---|---|
+| `created_at` (range-sharded) | Effectively infinite | 100% of writes hit the newest shard |
+| `user_id` (social graph) | 500M | One celebrity = 600M follower rows in one partition |
+| `tenant_id` (B2B SaaS) | 10k | Largest enterprise customer is 40% of all rows |
+
+Fixes: **hash instead of range** kills the sequential hotspot (costs you range scans),
+or **salt the hot values** — `(celebrity_id, bucket)` with `bucket = 0..99` spreads one
+logical entity across 100 partitions. Salt only the keys you've detected as hot.
+
+**3. Present in most queries — can you route without asking everyone?**
+
+Shard `orders` by `order_id` when 90% of traffic is "show me user X's orders" and the
+router has nothing to route on, so it asks every shard. The real cost is **tail latency
+amplification**, not the N network calls:
+
+```
+each shard fast 99% of the time, fan out to 100
+P(all respond fast) = 0.99^100 ~= 37%   -> 63% of requests wait on a slow shard
+```
+
+Your p50 starts behaving like your old p99. Sorting and pagination get worse still —
+"top 20 by date" means pulling 20 rows from each of 100 shards, then merging.
+
+Shard by `user_id` instead and lookup-by-`order_id` becomes the scatter. Two escapes:
+a lookup table `order_id -> user_id` sharded by `order_id` (one extra hop), or **embed
+the shard id in the id** so it self-routes (zero hops, but that ID can never be
+re-sharded).
+
+| Property | Guarantees | Breaks as |
+|---|---|---|
+| High cardinality | You can split the data at all | Unsplittable mega-partition |
+| Even distribution | Load spreads across nodes | Hotspot one node can't shed |
+| In most queries | Single-hop routing | Scatter-gather, tail amplification |
+
+**Most real systems can't get all three.** The senior answer names the property you
+gave up and how you compensated: "sharded by `user_id` for query locality, accepted
+celebrity skew, salt the top 0.01% of accounts."
+
 ### The hard parts of sharding
 
 ```mermaid
@@ -163,9 +220,30 @@ how Vitess, Citus, and many in-house systems work — a strong senior answer.
 Snowflake ID (64 bits): [1 unused][41 timestamp ms][10 machine id][12 sequence]
  -> time-sortable, no coordination, 4096 ids/ms/node, ~69 years of range
 ```
+**The sequence** is a per-node in-memory counter that breaks ties *within* one
+millisecond: `0, 1, 2…`, reset to 0 whenever the clock ticks over, masked to 12 bits so
+it wraps at 4095. Burn all 4096 in a single ms and the generator busy-waits for the next
+ms rather than reuse a value — that spin is where the 4096 ids/ms ceiling actually comes
+from. Uniqueness is guaranteed by the whole tuple `(timestamp, machine, sequence)`,
+which is why the counter needs no coordination: two nodes can both sit at `seq=17` in
+the same millisecond and never collide.
+
+**The machine id is the ID-*generating* process** — the app server or ID-service
+instance, not a DB node. IDs are minted before the write ever reaches storage; the
+database never sees or cares about those bits. Assign from a k8s StatefulSet ordinal or
+a ZooKeeper/etcd ephemeral sequential node. Two instances holding the same machine id
+emit duplicates *silently* — nothing is checked centrally — so the assignment mechanism
+matters more than it looks, and `hash(hostname) % 1024` is a birthday-collision trap.
+
+The bit split is tunable: few machines but extreme per-node throughput? Take bits from
+the machine id and give them to the sequence (8b machine / 14b sequence -> 256 nodes,
+16K ids/ms).
+
 Alternatives: UUIDv7 (time-ordered, no coordination, 128 bits), DB ticket server with
 step ranges, ULID. Plain UUIDv4 is fine for uniqueness but **destroys B-Tree locality**
-on insert — mention that.
+on insert — mention that. UUIDv7/ULID is the modern default unless 8-byte IDs or
+per-node throughput genuinely matter; Snowflake costs you the machine-id
+infrastructure.
 
 ---
 

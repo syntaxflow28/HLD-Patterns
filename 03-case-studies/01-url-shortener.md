@@ -38,11 +38,46 @@ Record: short_key 7 B + long_url ~200 B + metadata ~100 B ≈ ~300 B
 Storage/day  = 100 M x 300 B = 30 GB/day
 Storage/5yr  = ~55 TB  -> x3 replication = ~165 TB
 
-Cache: 20% of daily reads are on ~hot links. Assume 20 M hot keys x 300 B ≈ 6 GB
+Cache: ~85% of daily reads land on a hot set of ~20 M keys x 300 B ≈ 6 GB
        -> the entire hot set fits in memory on 2-3 nodes. Cache is the whole game.
 
 Key space: 62^7 = ~3.5 trillion -> 100 M/day for ~95 years. 7 chars is enough.
 ```
+
+**Why 6 GB of cache survives 55 TB of data**
+
+The obvious objection: data keeps arriving at 100 M/day, so how does a fixed 6 GB cache
+help? Because the two numbers answer different questions — 55 TB is *how many links
+exist*, 6 GB is *how many distinct links get requested in a window*. The corpus grows
+linearly forever; the working set is a sliding window that stays roughly flat:
+
+- **Power-law popularity** — a viral link takes millions of hits while the median link
+  takes single digits. The top ~20 M keys carry most of the traffic whether there are
+  1 B or 180 B links behind them.
+- **Time decay** — a short link's life is *shared -> burst over hours/days -> dead*. Each
+  day's 100 M new links push into the LRU while yesterday's cool out. The hot set
+  churns; it does not accumulate.
+
+After 5 years the cache holds **~0.01% of the corpus** (20 M of ~180 B keys). The other
+99.99% is correctly never touched and sits on cheap disk.
+
+The payoff is not latency — it is not having to size the storage tier for peak read QPS:
+
+```
+Peak reads = 350 K QPS
+
+no cache   -> 350 K QPS against 55 TB   (provision for IOPS -> huge node count)
+90% hits   ->  35 K QPS to the DB       (10x fewer nodes)
+95% hits   -> 17.5 K QPS
+99% hits   ->  3.5 K QPS                (same order as the write load)
+```
+
+Storage is then sized by **capacity** (165 TB) rather than **throughput** — a much
+cheaper problem. Misses still meet SLA (a KV point lookup is ~5-10 ms against a 50 ms
+p99 budget), so a miss costs money, not correctness. Returns are logarithmic: 6 GB ->
+12 GB might move you 95% -> 96.5%, which is why cache size need not track corpus growth.
+If the hot set does grow, scale that tier horizontally with consistent hashing — 6 GB ->
+100 GB is still only a handful of nodes.
 
 **Conclusions**
 1. 350 K peak read QPS with a 6 GB hot set → **cache-first architecture**, DB is a
@@ -170,6 +205,12 @@ check the pool).
 and present in 100% of queries. Say this explicitly — it is exactly what the
 interviewer wants to hear about shard key selection.
 
+It is also unusual in getting all three free: 62^7 ≈ 3.5T distinct values, exactly one
+row per value (so max partition size is one row), random by construction, and it's the
+only thing the redirect path ever looks up. Most systems have to trade one away — see
+[choosing a shard key](../01-core-concepts/05-replication-partitioning-consistency.md#choosing-a-shard-key--the-highest-value-decision)
+for the failure mode behind each property.
+
 ---
 
 ## 7. Architecture
@@ -209,6 +250,38 @@ write-through to cache (gives immediate read-your-writes) → return.
 
 ## 8. Deep dives
 
+### Service boundaries — why Redirect and Write share a store
+"Shouldn't each microservice own its database?" That rule is about **bounded contexts,
+not process count**. Redirect and Write are two deployments of *one* context — the link
+aggregate — split by workload rather than by domain:
+
+| | Microservice decomposition | Read/write split (used here) |
+|---|---|---|
+| Split along | Domain boundary | Workload profile |
+| Data model | Different per service | **Identical** |
+| Motivation | Team autonomy, independent evolution | Different QPS, SLA, scaling curve |
+| Coupling via | API / events | Shared store, deliberately |
+
+The split is earned by 350 K vs 3.5 K peak QPS and 99.99% vs 99.9% availability:
+co-deploying means a write-path deploy or leak takes down redirects, and autoscaling on
+read traffic provisions write capacity you never use. That separates **compute** — it
+says nothing about separating data.
+
+Separating the *data* would break a stated requirement. Read-your-writes means a
+redirect must return what the create just wrote; two stores means replication lag
+between them. The write-through to cache on the write path is precisely the mechanism
+that delivers it, not accidental coupling.
+
+**The real service boundary here is link management vs. click analytics** — different
+model (time-series events vs. a KV mapping), different consistency (approximate, HLL
+uniques), different scale (10 B events/day). That one *does* get its own store and is
+coupled through **Kafka, not shared tables**, which is exactly why analytics can be
+entirely down while redirects keep serving.
+
+Trade-off to name out loud: both services share a schema, so a migration coordinates
+across two deployments. Mitigate with a shared data-access library and one team owning
+the link aggregate — cheap, because it genuinely is one team and one aggregate.
+
 ### Cache strategy
 - **Cache-aside + write-through on create** so a new link is instantly redirectable.
 - TTL ~24 h with jitter; hot links effectively never expire because they're re-read.
@@ -228,6 +301,43 @@ QPS for that key at ~40/s regardless of traffic. Cheapest possible fix.
 - Batch events in-process and flush to Kafka every 100 ms.
 - Stream-aggregate into per-(link, hour) counters; use HyperLogLog for unique visitors.
 - Exact counts are not required → approximation is a legitimate, cheaper choice.
+
+### Why raw events go to the lake, not just `click_stats`
+`click_stats` is a **one-way door**: it answers `(short_key, day) -> clicks, uniques,
+top_countries` and nothing else. The raw event carries `ts`, `ip_country`, `referrer`,
+`user_agent_class`; the rollup carries none of it, and an HLL can be unioned but never
+sliced along a dimension it was not keyed on. Two consequences force keeping raw:
+
+- **New questions arrive later.** A metric requested in six months can be backfilled
+  across years of history from the lake. With rollups only you start collecting today
+  and have no past.
+- **The aggregation will have a bug** — timezone bucketing, double-counting on consumer
+  restart, HLL precision. Raw events let you replay and recompute correct history;
+  without them the wrong numbers are permanent, because Kafka retention is ~7 days.
+
+Then the ones that show up at scale: billing disputes over click counts, fraud detection
+(needs raw IP/timing patterns that rollups erase), and ML training data.
+
+**Lake and warehouse are stages, not alternatives:**
+
+| | Data lake | Warehouse |
+|---|---|---|
+| Contains | Raw events, near-verbatim | Modeled, cleaned, joined tables |
+| Storage | Object store + Parquet/Iceberg | Columnar analytical DB |
+| Schema | On read | On write |
+| Role | Immutable source of truth | Query surface for analysts |
+
+Land raw first and build the warehouse from it via ETL, so a modeling mistake stays
+recoverable. The volume justifies the tiering: `10 B/day x ~50 B Parquet ≈ 500 GB/day
+≈ 180 TB/yr` — fine on object storage, absurd in a serving store.
+
+**Why not serve analytics from `click_stats`?** Different workloads: the Stats API needs
+point lookups in ms, analysts need full scans and joins over billions of rows. One store
+for both means a runaway `GROUP BY` degrades the customer-facing API.
+
+**Why this costs the redirect path nothing:** both sinks are independent Kafka consumer
+groups with their own offsets. The lake pipeline can be down for a day and simply replays
+from the retained log — the redirect path never knows.
 
 ### Expiry & deletion
 Lazy expiry on read (check `expires_at`, return 410) plus a background sweeper for
@@ -273,8 +383,10 @@ at redirect time from a small in-memory set; rate limit creation per IP/account.
 | Store | Sharded KV | RDBMS | Pure point lookups at 350 K QPS; no joins needed |
 | Redirect code | 302 | 301 | Preserves analytics, allows expiry/revocation |
 | Analytics | Async + approximate (HLL) | Sync exact counters | Never slow down the redirect; exactness isn't required |
+| Event retention | Raw events to the lake *and* rollups | Rollups only | Aggregation is a one-way door — new metrics and reprocessing after a pipeline bug both need raw history |
 | Cache | Redis + in-process L1 | Redis only | Handles hot keys and reduces network hops |
 | Consistency | Read-your-writes via write-through | Full strong consistency | Mapping is immutable, so eventual is fine elsewhere |
+| Service split | Read/write split over a shared store | A database per service | One bounded context split by workload; read-your-writes needs the shared store. The real boundary (analytics) *is* split |
 
 ---
 
@@ -288,6 +400,8 @@ at redirect time from a small in-memory set; rate limit creation per IP/account.
 | "Sequential IDs are guessable — so?" | Competitors can enumerate your links and infer your volume. Encrypt the counter (Feistel/skip32) before base62: unique by construction, unguessable |
 | "Redis dies. What happens?" | Redirects fall through to the KV store; p99 goes ~1 ms → 5–10 ms. The KV tier must be provisioned for that fallback burst, or you shed non-critical traffic |
 | "Someone scans random short keys." | Cache penetration — every miss hits the KV store. Negative-cache 404s for ~30 s and put a Bloom filter of existing keys in front |
+| "Why keep raw events if you already have `click_stats`?" | Aggregation is irreversible — the rollup can't answer a question it wasn't keyed on, and an HLL can't be sliced. Raw history is what lets you backfill a new metric and recompute after an aggregation bug; Kafka only retains ~7 days |
+| "Shouldn't each service own its database?" | That rule is about bounded contexts, not process count. Redirect and Write are one context split by workload (100:1 traffic, different SLAs), and read-your-writes *requires* the shared store. The real boundary is link management vs. click analytics — and that one is split properly: own store, coupled via Kafka |
 | "One link goes viral and melts a Redis shard." | In-process L1 cache with a 1–5 s TTL. With 200 instances that caps Redis at ~40 req/s for that key regardless of traffic |
 | "Do you need transactions anywhere?" | Only for custom aliases (`INSERT ... IF NOT EXISTS`). Generated keys are unique by construction and the mapping is immutable |
 | "How do you make this multi-region active-active?" | The mapping is immutable after creation, so it replicates trivially. The only conflict is custom aliases — route those through one region or a consensus-backed uniqueness check |
